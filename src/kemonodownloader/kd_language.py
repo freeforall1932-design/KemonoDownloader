@@ -3844,6 +3844,157 @@ class KDLanguage:
                 "korean": "다운로드할 썸네일이 선택되지 않았습니다.",
                 "chinese-simplified": "未选择要下载的缩略图。",
             },
+            # ── Pawchive favorites batch / sync / import ──────────────────
+            "pawchive_fav_group": {
+                "english": "Pawchive Favorites & Import",
+                "japanese": "Pawchive お気に入りとインポート",
+                "korean": "Pawchive 즐겨찾기 및 가져오기",
+                "chinese-simplified": "Pawchive 收藏与导入",
+            },
+            "pawchive_api_key_placeholder": {
+                "english": "Pawchive API key (Account → Keys)",
+                "japanese": "Pawchive APIキー（アカウント → キー）",
+                "korean": "Pawchive API 키 (계정 → 키)",
+                "chinese-simplified": "Pawchive API 密钥（账户 → 密钥）",
+            },
+            "fetch_favorites_btn": {
+                "english": "Fetch Favorites & Queue",
+                "japanese": "お気に入りを取得してキューへ",
+                "korean": "즐겨찾기 가져오기 및 대기열 추가",
+                "chinese-simplified": "获取收藏并加入队列",
+            },
+            "sync_favorites_btn": {
+                "english": "Sync",
+                "japanese": "同期",
+                "korean": "동기화",
+                "chinese-simplified": "同步",
+            },
+            "monitor_recent_feed": {
+                "english": "Monitor recent posts feed",
+                "japanese": "最近の投稿フィードを監視",
+                "korean": "최근 게시물 피드 모니터링",
+                "chinese-simplified": "监控最近帖子动态",
+            },
+            "favorites_json_placeholder": {
+                "english": "Paste favorites JSON here…",
+                "japanese": "お気に入りJSONをここに貼り付け…",
+                "korean": "즐겨찾기 JSON을 여기에 붙여넣기…",
+                "chinese-simplified": "在此粘贴收藏 JSON…",
+            },
+            "import_favorites_json_btn": {
+                "english": "Import Favorites JSON",
+                "japanese": "お気に入りJSONをインポート",
+                "korean": "즐겨찾기 JSON 가져오기",
+                "chinese-simplified": "导入收藏 JSON",
+            },
+            "queue_pasted_json_btn": {
+                "english": "Queue pasted JSON",
+                "japanese": "貼り付けたJSONをキューへ",
+                "korean": "붙여넣은 JSON 대기열 추가",
+                "chinese-simplified": "将粘贴的 JSON 加入队列",
+            },
+            "old_site_domain_placeholder": {
+                "english": "kemono.su",
+                "japanese": "kemono.su",
+                "korean": "kemono.su",
+                "chinese-simplified": "kemono.su",
+            },
+            "old_site_cred_placeholder": {
+                "english": "Old site session cookie / API key",
+                "japanese": "旧サイトのセッションCookie / APIキー",
+                "korean": "이전 사이트 세션 쿠키 / API 키",
+                "chinese-simplified": "旧站会话 Cookie / API 密钥",
+            },
+            "crawl_old_site_btn": {
+                "english": "Crawl from old site",
+                "japanese": "旧サイトからクロール",
+                "korean": "이전 사이트에서 크롤링",
+                "chinese-simplified": "从旧站爬取",
+            },
+            "select_favorites_json": {
+                "english": "Select favorites JSON export",
+                "japanese": "お気に入りJSONエクスポートを選択",
+                "korean": "즐겨찾기 JSON 내보내기 선택",
+                "chinese-simplified": "选择收藏 JSON 导出文件",
+            },
+            "favorites_no_api_key": {
+                "english": "No Pawchive API key entered.",
+            },
+            "favorites_fetching": {
+                "english": "Fetching Pawchive favorites…",
+            },
+            "favorites_syncing": {
+                "english": "Syncing Pawchive favorites…",
+            },
+            "favorites_fetch_in_progress": {
+                "english": "A favorites fetch is already in progress.",
+            },
+            "favorites_fetch_failed": {
+                "english": "Failed to fetch favorites: {0}",
+            },
+            "favorites_queued_count": {
+                "english": "Queued {0} new artist(s) for batch download.",
+            },
+            "favorites_skipped_count": {
+                "english": "Skipped {0} artist(s) (already queued or processed).",
+            },
+            "favorites_sync_done": {
+                "english": "Sync complete: {0} new, {1} skipped.",
+            },
+            "recent_feed_fetched": {
+                "english": "Recent posts feed: queued {0} creator(s).",
+            },
+            "json_import_parsed": {
+                "english": "Parsed {0} artist(s) from favorites JSON.",
+            },
+            "json_import_invalid": {
+                "english": "Could not parse favorites JSON: {0}",
+            },
+            "json_import_empty": {
+                "english": "Paste or load a favorites JSON export first.",
+            },
+            "old_site_no_domain": {
+                "english": "Enter the old site domain (e.g. kemono.su).",
+            },
+            "old_site_no_cred": {
+                "english": "Enter the old site session cookie or API key.",
+            },
+            "old_site_crawling": {
+                "english": "Crawling favorites from {0}…",
+            },
+            "old_site_crawled": {
+                "english": "Crawled {0} artist(s) from {1}.",
+            },
+            "old_site_crawl_failed": {
+                "english": "Failed to crawl old site favorites: {0}",
+            },
+            "old_site_crawl_in_progress": {
+                "english": "An old-site crawl is already in progress.",
+            },
+            "post_already_processed": {
+                "english": "Post {0} already processed; skipping re-crawl.",
+            },
+            "has_full_false_thumbnail": {
+                "english": "Post has_full=false; using thumbnail for {0}",
+            },
+            "file_404_requeue": {
+                "english": "Full-res file missing (404); pushing to back of queue: {0}",
+            },
+            "file_network_requeue": {
+                "english": "Network error on full-res file; pushing to back of queue: {0}",
+            },
+            "thumbnail_fallback": {
+                "english": "Retry failed; falling back to thumbnail for {0}",
+            },
+            "thumbnail_fallback_ok": {
+                "english": "Downloaded degraded thumbnail for {0}",
+            },
+            "thumbnail_fallback_failed": {
+                "english": "Thumbnail fallback failed for {0}: {1}",
+            },
+            "requeueing_downloads": {
+                "english": "Retrying {0} failed full-res download(s)…",
+            },
         }
 
     def get_text(self, key, language=None, *args):
