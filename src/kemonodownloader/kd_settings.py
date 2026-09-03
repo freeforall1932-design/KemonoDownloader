@@ -54,6 +54,9 @@ class SettingsTab(QWidget):
             # Creator downloader filename/folder customization
             "creator_filename_template": "{post_id}_{orig_name}",
             "creator_folder_strategy": "per_post",  # per_post|single_folder|by_file_type
+            # Pawchive favorites / import settings
+            "pawchive_api_key": "",
+            "monitor_recent_posts_feed": False,  # OFF by default
             # Font setting
             "font": "JetBrains Mono",  # "JetBrains Mono", "Poppins"
         }
@@ -149,6 +152,15 @@ class SettingsTab(QWidget):
             self.default_settings.get("creator_folder_strategy", "per_post"),
             type=str,
         )
+        # Pawchive favorites / import settings
+        settings_dict["pawchive_api_key"] = self.qsettings.value(
+            "pawchive_api_key", self.default_settings["pawchive_api_key"], type=str
+        )
+        settings_dict["monitor_recent_posts_feed"] = self.qsettings.value(
+            "monitor_recent_posts_feed",
+            self.default_settings["monitor_recent_posts_feed"],
+            type=bool,
+        )
         # Font setting
         settings_dict["font"] = self.qsettings.value(
             "font", self.default_settings.get("font", "JetBrains Mono"), type=str
@@ -188,6 +200,14 @@ class SettingsTab(QWidget):
         self.qsettings.setValue(
             "creator_folder_strategy",
             self.settings.get("creator_folder_strategy", "per_post"),
+        )
+        # Pawchive favorites / import settings
+        self.qsettings.setValue(
+            "pawchive_api_key", self.settings.get("pawchive_api_key", "")
+        )
+        self.qsettings.setValue(
+            "monitor_recent_posts_feed",
+            bool(self.settings.get("monitor_recent_posts_feed", False)),
         )
         # Font setting
         self.qsettings.setValue(
@@ -1423,6 +1443,24 @@ class SettingsTab(QWidget):
 
     def get_font(self):
         return self.settings.get("font", "JetBrains Mono")
+
+    def get_pawchive_api_key(self):
+        return self.settings.get("pawchive_api_key", "")
+
+    def is_recent_posts_feed_enabled(self):
+        return bool(self.settings.get("monitor_recent_posts_feed", False))
+
+    def set_pawchive_api_key(self, value):
+        self.settings["pawchive_api_key"] = value or ""
+        self.temp_settings["pawchive_api_key"] = self.settings["pawchive_api_key"]
+        self.qsettings.setValue("pawchive_api_key", self.settings["pawchive_api_key"])
+        self.qsettings.sync()
+
+    def set_monitor_recent_posts_feed(self, value):
+        self.settings["monitor_recent_posts_feed"] = bool(value)
+        self.temp_settings["monitor_recent_posts_feed"] = bool(value)
+        self.qsettings.setValue("monitor_recent_posts_feed", bool(value))
+        self.qsettings.sync()
 
     def get_proxy_type_index(self, proxy_type):
         type_map = {"custom": 0, "tor": 1}
