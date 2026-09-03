@@ -8,7 +8,8 @@ import json
 import os
 import sqlite3
 import threading
-from typing import Optional
+import time
+from typing import Optional, Set, Tuple
 
 
 class HashDB:
@@ -59,6 +60,35 @@ class HashDB:
                         file_hash  TEXT NOT NULL,
                         url        TEXT NOT NULL,
                         file_size  INTEGER NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+                conn.commit()
+                # Post-level processed log for metadata-level deduplication:
+                # records which posts were fully downloaded so they are not
+                # re-crawled on later runs.
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS processed_posts (
+                        key        TEXT PRIMARY KEY,
+                        service    TEXT NOT NULL,
+                        creator_id TEXT NOT NULL,
+                        post_id    TEXT NOT NULL,
+                        url        TEXT,
+                        timestamp  REAL NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+                # Creator-level processed log used by the favorites sync to
+                # skip artists that have already been fully downloaded.
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS processed_creators (
+                        key        TEXT PRIMARY KEY,
+                        service    TEXT NOT NULL,
+                        creator_id TEXT NOT NULL,
+                        url        TEXT,
+                        timestamp  REAL NOT NULL DEFAULT 0
                     )
                     """
                 )
@@ -224,5 +254,100 @@ class HashDB:
             try:
                 conn.execute("DELETE FROM file_hashes")
                 conn.commit()
+            finally:
+                conn.close()
+
+    # ------------------------------------------------------------------
+    # Post / creator processed log (metadata-level deduplication)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _post_key(service: str, creator_id: str, post_id: str) -> str:
+        return f"{service}|{creator_id}|{post_id}"
+
+    @staticmethod
+    def _creator_key(service: str, creator_id: str) -> str:
+        return f"{service}|{creator_id}"
+
+    def mark_post_processed(
+        self, service: str, creator_id: str, post_id: str, url: Optional[str] = None
+    ) -> None:
+        """Record that *post_id* was fully downloaded."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO processed_posts
+                    (key, service, creator_id, post_id, url, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        self._post_key(service, creator_id, post_id),
+                        service,
+                        creator_id,
+                        post_id,
+                        url,
+                        time.time(),
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def is_post_processed(self, service: str, creator_id: str, post_id: str) -> bool:
+        """Return ``True`` when *post_id* has already been processed."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM processed_posts WHERE key = ?",
+                    (self._post_key(service, creator_id, post_id),),
+                ).fetchone()
+                return row is not None
+            finally:
+                conn.close()
+
+    def mark_creator_processed(
+        self, service: str, creator_id: str, url: Optional[str] = None
+    ) -> None:
+        """Record that *creator_id* was fully downloaded."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO processed_creators
+                    (key, service, creator_id, url, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (self._creator_key(service, creator_id), service, creator_id, url, time.time()),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def is_creator_processed(self, service: str, creator_id: str) -> bool:
+        """Return ``True`` when *creator_id* has already been processed."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM processed_creators WHERE key = ?",
+                    (self._creator_key(service, creator_id),),
+                ).fetchone()
+                return row is not None
+            finally:
+                conn.close()
+
+    def get_processed_creators(self) -> Set[Tuple[str, str]]:
+        """Return the set of ``(service, creator_id)`` pairs already processed."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                rows = conn.execute(
+                    "SELECT service, creator_id FROM processed_creators"
+                ).fetchall()
+                return {(row["service"], row["creator_id"]) for row in rows}
             finally:
                 conn.close()

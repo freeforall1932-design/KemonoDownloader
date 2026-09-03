@@ -181,6 +181,48 @@ def clean_file_url(file_url: str, domain_config: Dict[str, str]) -> str:
     return full_url
 
 
+def to_thumbnail_url(raw_path_or_url: str, domain_config: Dict[str, str]) -> str:
+    """Convert a full-resolution file path or URL to its thumbnail URL.
+
+    Mirrors the thumbnail URL layout used by the ``img.<domain>`` delivery
+    servers, e.g. ``https://img.pawchive.pw/thumbnail/data/ab/cd/….jpeg``.
+
+    URLs that already point at a thumbnail are returned unchanged.
+    """
+    from urllib.parse import urlparse
+
+    raw = (raw_path_or_url or "").strip()
+    if not raw:
+        return raw
+
+    domain = str(domain_config.get("domain", "") or "")
+    clean_domain = (
+        domain.replace("https://", "").replace("http://", "").split("/")[0]
+    )
+
+    if raw.startswith("http://") or raw.startswith("https://"):
+        parsed = urlparse(raw)
+        path = parsed.path
+        if (
+            "img." in parsed.netloc or parsed.netloc.startswith("img.")
+        ) and "/thumbnail/" in path:
+            return raw
+    else:
+        path = raw
+
+    if not path.startswith("/"):
+        path = "/" + path
+
+    if path.startswith("/data/"):
+        thumb_path = "/thumbnail" + path
+    elif path.startswith("/thumbnail/"):
+        thumb_path = path
+    else:
+        thumb_path = "/thumbnail/data/" + path.lstrip("/")
+
+    return f"https://img.{clean_domain}{thumb_path}"
+
+
 def get_domain_config(url: str) -> Dict[str, str]:
     """Return the domain configuration that matches *url*.
 
