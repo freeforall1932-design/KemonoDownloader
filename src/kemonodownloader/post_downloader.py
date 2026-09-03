@@ -47,6 +47,7 @@ from kemonodownloader.domain_config import (
     clean_file_url,
     get_domain_config,
     get_domains,
+    to_thumbnail_url,
 )
 from kemonodownloader.hash_db import HashDB
 
@@ -950,13 +951,26 @@ class FilePreparationThread(QThread):
             path_ext = os.path.splitext(file_path)[1].lower()
             return name_ext if name_ext else path_ext
 
+        # ``has_full: false`` means no full-resolution file is available;
+        # go straight to the thumbnail to avoid a guaranteed 404.
+        use_thumbnail = post.get("has_full") is False
+
         if "file" in post and post["file"] and "path" in post["file"]:
             file_path = post["file"]["path"]
             file_name = post["file"].get("name", "")
             file_ext = get_effective_extension(file_path, file_name)
-            file_url = clean_file_url(file_path, self.domain_config)
-            if "f=" not in file_url and file_name:
-                file_url += f"?f={file_name}"
+            if use_thumbnail:
+                file_url = to_thumbnail_url(file_path, self.domain_config)
+                self.log.emit(
+                    translate(
+                        "log_debug", translate("has_full_false_thumbnail", file_name)
+                    ),
+                    "INFO",
+                )
+            else:
+                file_url = clean_file_url(file_path, self.domain_config)
+                if "f=" not in file_url and file_name:
+                    file_url += f"?f={file_name}"
             self.log.emit(
                 translate("log_debug", f"Checking main file: {file_name} ({file_ext})"),
                 "INFO",
@@ -980,9 +994,23 @@ class FilePreparationThread(QThread):
                     attachment_ext = get_effective_extension(
                         attachment_path, attachment_name
                     )
-                    attachment_url = clean_file_url(attachment_path, self.domain_config)
-                    if "f=" not in attachment_url and attachment_name:
-                        attachment_url += f"?f={attachment_name}"
+                    if use_thumbnail:
+                        attachment_url = to_thumbnail_url(
+                            attachment_path, self.domain_config
+                        )
+                        self.log.emit(
+                            translate(
+                                "log_debug",
+                                translate("has_full_false_thumbnail", attachment_name),
+                            ),
+                            "INFO",
+                        )
+                    else:
+                        attachment_url = clean_file_url(
+                            attachment_path, self.domain_config
+                        )
+                        if "f=" not in attachment_url and attachment_name:
+                            attachment_url += f"?f={attachment_name}"
                     self.log.emit(
                         translate(
                             "log_debug",
@@ -1365,6 +1393,12 @@ class DownloadThread(QThread):
         # only the session.get() call (which does SSL + redirects) while
         # allowing concurrent body streaming avoids the problem.
         self._ssl_lock = threading.Lock()
+        # Full-res retry state: files that fail with 404/network errors are
+        # re-dispatched once after the first pass, then fall back to the
+        # thumbnail on a second failure.
+        self._retry_lock = threading.Lock()
+        self._retried_files = set()
+        self._retry_pending = []
         # Flag set when the C++ QThread wrapper is about to be destroyed.
         # Workers check this before emitting signals to avoid accessing
         # a deleted C++ object.
@@ -1676,6 +1710,10 @@ class DownloadThread(QThread):
                 return
 
             except Exception as e:
+                # Full-res 404 / network errors get a single back-of-queue
+                # retry, then a thumbnail fallback.
+                if self._handle_full_res_failure(file_url, full_path, file_index, e):
+                    return
                 if attempt == max_retries:
                     self.log.emit(
                         translate(
@@ -1738,6 +1776,126 @@ class DownloadThread(QThread):
             )
         except Exception:
             pass
+
+    @staticmethod
+    def _is_full_res_url(file_url: str) -> bool:
+        """Return True when *file_url* targets a full-resolution file."""
+        if not file_url:
+            return False
+        if "img." in file_url or "/thumbnail/" in file_url:
+            return False
+        return "/data/" in file_url
+
+    def _handle_full_res_failure(self, file_url, full_path, file_index, exc):
+        """Handle a 404 or network failure on a full-res download.
+
+        The first failure schedules the file for a single retry after the rest
+        of the batch finishes; a second failure falls back to the thumbnail.
+        Returns ``True`` when the failure was fully handled here.
+        """
+        if not self._is_full_res_url(file_url):
+            return False
+
+        status = None
+        response = getattr(exc, "response", None)
+        if response is not None:
+            status = getattr(response, "status_code", None)
+        if status not in (404, None):  # 404 or network error (no response)
+            return False
+
+        with self._retry_lock:
+            already_retried = file_url in self._retried_files
+            self._retried_files.add(file_url)
+
+        if not already_retried:
+            self.log.emit(
+                translate(
+                    "log_info",
+                    translate(
+                        "file_404_requeue" if status == 404 else "file_network_requeue",
+                        str(exc),
+                    ),
+                ),
+                "INFO",
+            )
+            with self._retry_lock:
+                self._retry_pending.append((file_index, file_url))
+            return True
+
+        # Second failure: fall back to the thumbnail and log it as degraded.
+        self.log.emit(
+            translate("log_warning", translate("thumbnail_fallback", file_url)),
+            "WARNING",
+        )
+        if self._download_thumbnail_sync(file_url, full_path, file_index):
+            return True
+
+        self.log.emit(
+            translate(
+                "log_error",
+                translate("thumbnail_fallback_failed", file_url, str(exc)),
+            ),
+            "ERROR",
+        )
+        self.file_progress.emit(file_index, 0)
+        self.file_completed.emit(file_index, file_url, False)
+        return True
+
+    def _download_thumbnail_sync(self, file_url, full_path, file_index):
+        """Download the thumbnail for *file_url* into *full_path* (degraded)."""
+        thumb_url = to_thumbnail_url(file_url, self.domain_config)
+        if not thumb_url or thumb_url == file_url:
+            return False
+        try:
+            headers = get_headers().copy()
+            headers["Referer"] = self.domain_config["referer"]
+            with self._ssl_lock:
+                if not self.is_running:
+                    return False
+                response = get_session(self.settings.settings_tab).get(
+                    thumb_url, headers=headers, stream=True, timeout=(30, 30)
+                )
+            try:
+                response.raise_for_status()
+                with open(full_path, "wb") as fh:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if not self.is_running:
+                            return False
+                        if chunk:
+                            fh.write(chunk)
+            finally:
+                response.close()
+
+            with open(full_path, "rb") as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+            actual_size = os.path.getsize(full_path)
+            # Store under the ORIGINAL full-res URL hash so later runs don't
+            # waste a request re-trying a file we already know is degraded.
+            self.hash_db.store(
+                hashlib.md5(file_url.encode()).hexdigest(),
+                full_path,
+                file_hash,
+                file_url,
+                actual_size,
+            )
+            self.log.emit(
+                translate("log_info", translate("thumbnail_fallback_ok", file_url)),
+                "INFO",
+            )
+            self.file_completed.emit(file_index, file_url, True)
+            with self.completed_files_lock:
+                self.completed_files.add(file_url)
+            self.check_post_completion(file_url)
+            return True
+        except Exception as e:
+            self.log.emit(
+                translate(
+                    "log_error",
+                    translate("thumbnail_fallback_failed", file_url, str(e)),
+                ),
+                "ERROR",
+            )
+            return False
 
     def check_post_completion(self, file_url):
         post_id = self.files_to_posts_map.get(file_url)
@@ -1856,6 +2014,44 @@ class DownloadThread(QThread):
             for w in workers:
                 while w.is_alive() and time.monotonic() < _deadline:
                     time.sleep(0.05)
+
+            # Second pass: retry full-res files that failed with 404/network
+            # errors exactly once, after the first pass finished.
+            with self._retry_lock:
+                retry_batch = list(self._retry_pending)
+                self._retry_pending.clear()
+            if retry_batch:
+                self.log.emit(
+                    translate(
+                        "log_info",
+                        translate("requeueing_downloads", len(retry_batch)),
+                    ),
+                    "INFO",
+                )
+                for file_index, file_url in retry_batch:
+                    if not self.is_running:
+                        break
+                    while True:
+                        with slot_lock:
+                            if active_slots[0] < self.max_concurrent:
+                                active_slots[0] += 1
+                                break
+                        if not self.is_running:
+                            break
+                        time.sleep(0.05)
+                    if not self.is_running:
+                        break
+                    t = threading.Thread(
+                        target=_worker,
+                        args=(file_url, self.download_folder, file_index, total_files),
+                        daemon=True,
+                    )
+                    t.start()
+                    workers.append(t)
+                _deadline = time.monotonic() + 30
+                for w in workers:
+                    while w.is_alive() and time.monotonic() < _deadline:
+                        time.sleep(0.05)
         else:
             self.log.emit(
                 translate(

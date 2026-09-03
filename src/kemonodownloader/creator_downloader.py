@@ -43,9 +43,11 @@ from kemonodownloader.domain_config import (
     clean_file_url,
     get_domain_config,
     get_domains,
+    to_thumbnail_url,
 )
 from kemonodownloader.hash_db import HashDB
 from kemonodownloader.kd_language import translate
+from kemonodownloader import pawchive
 
 
 class ThreadSettings:
@@ -931,6 +933,7 @@ class FilePreparationThread(QThread):
         creator_content_check,
         settings,
         max_concurrent=20,
+        hash_db=None,
     ):
         super().__init__()
         self.post_ids = post_ids
@@ -941,6 +944,7 @@ class FilePreparationThread(QThread):
         self.creator_content_check = creator_content_check
         self.settings = settings
         self.max_concurrent = max_concurrent
+        self.hash_db = hash_db  # Optional processed-post log (metadata dedup)
         self.is_running = True
 
     def stop(self):
@@ -960,6 +964,11 @@ class FilePreparationThread(QThread):
             path_ext = os.path.splitext(file_path)[1].lower()
             return name_ext if name_ext else path_ext
 
+        # When the API reports ``has_full: false`` the full-resolution file
+        # is not available; go straight to the thumbnail to avoid a wasted
+        # (and guaranteed-to-404) full-res request.
+        use_thumbnail = post.get("has_full") is False
+
         # Main file detection
         if (
             self.creator_main_check
@@ -970,9 +979,19 @@ class FilePreparationThread(QThread):
             file_path = post["file"]["path"]
             file_name = post["file"].get("name", "")
             file_ext = get_effective_extension(file_path, file_name)
-            file_url = clean_file_url(file_path, domain_config)
-            if "f=" not in file_url and file_name:
-                file_url += f"?f={file_name}"
+            if use_thumbnail:
+                file_url = to_thumbnail_url(file_path, domain_config)
+                self.log.emit(
+                    translate(
+                        "log_debug",
+                        translate("has_full_false_thumbnail", file_name),
+                    ),
+                    "INFO",
+                )
+            else:
+                file_url = clean_file_url(file_path, domain_config)
+                if "f=" not in file_url and file_name:
+                    file_url += f"?f={file_name}"
             self.log.emit(
                 translate(
                     "log_debug", translate("checking_main_file", file_name, file_ext)
@@ -1001,9 +1020,25 @@ class FilePreparationThread(QThread):
                     attachment_ext = get_effective_extension(
                         attachment_path, attachment_name
                     )
-                    attachment_url = clean_file_url(attachment_path, domain_config)
-                    if "f=" not in attachment_url and attachment_name:
-                        attachment_url += f"?f={attachment_name}"
+                    if use_thumbnail:
+                        attachment_url = to_thumbnail_url(
+                            attachment_path, domain_config
+                        )
+                        self.log.emit(
+                            translate(
+                                "log_debug",
+                                translate(
+                                    "has_full_false_thumbnail", attachment_name
+                                ),
+                            ),
+                            "INFO",
+                        )
+                    else:
+                        attachment_url = clean_file_url(
+                            attachment_path, domain_config
+                        )
+                        if "f=" not in attachment_url and attachment_name:
+                            attachment_url += f"?f={attachment_name}"
                     self.log.emit(
                         translate(
                             "log_debug",
@@ -1089,6 +1124,23 @@ class FilePreparationThread(QThread):
             service = "unknown_service"
             creator_id = "unknown_creator"
         domain_config = get_domain_config(creator_url)
+
+        # Metadata-level dedup: skip posts that were already fully downloaded
+        # on a previous run so we don't re-crawl them.
+        if self.hash_db is not None:
+            try:
+                if self.hash_db.is_post_processed(service, creator_id, post_id):
+                    self.log.emit(
+                        translate(
+                            "log_info",
+                            translate("post_already_processed", post_id),
+                        ),
+                        "INFO",
+                    )
+                    return None
+            except Exception:
+                pass
+
         api_url = (
             f"{domain_config['api_base']}/{service}/user/{creator_id}/post/{post_id}"
         )
@@ -1393,6 +1445,12 @@ class CreatorDownloadThread(QThread):
         # only the session.get() call (which does SSL + redirects) while
         # allowing concurrent body streaming avoids the problem.
         self._ssl_lock = threading.Lock()
+        # Full-res retry state: files that fail with 404/network errors are
+        # pushed to the back of the download queue and retried once; if they
+        # fail again they fall back to the thumbnail.
+        self._queue = None  # asyncio.Queue, set in run()
+        self._retry_lock = threading.Lock()
+        self._requeued_files = set()
         # Defence flag: set in stop() *before* any cleanup.  Workers
         # check this before emitting signals so they never touch the
         # C++ object after it has been scheduled for deletion.
@@ -1912,6 +1970,12 @@ class CreatorDownloadThread(QThread):
                 return
 
             except requests.RequestException as e:
+                # Full-res 404 / network errors get a single back-of-queue
+                # retry, then a thumbnail fallback (see below).
+                if await self._handle_full_res_failure(
+                    file_url, full_path, file_index, total_files, e
+                ):
+                    return
                 if attempt == max_retries:
                     error_msg = translate(
                         "error_downloading_after_retries", file_url, max_retries, str(e)
@@ -1987,11 +2051,170 @@ class CreatorDownloadThread(QThread):
                 self.check_post_completion(file_url)
                 return
 
+    @staticmethod
+    def _is_full_res_url(file_url: str) -> bool:
+        """Return True when *file_url* targets a full-resolution file.
+
+        Thumbnails live on ``img.<domain>``; full-resolution files use the
+        ``/data/`` path on the file host.
+        """
+        if not file_url:
+            return False
+        if "img." in file_url or "/thumbnail/" in file_url:
+            return False
+        return "/data/" in file_url
+
+    async def _handle_full_res_failure(
+        self, file_url, full_path, file_index, total_files, exc
+    ):
+        """Handle a 404 or network failure on a full-res download.
+
+        The first failure pushes the file to the back of the queue for a
+        single retry; a second failure (or an unavailable queue) falls back
+        to the thumbnail, logging the result as degraded.  Returns ``True``
+        when the failure was fully handled here (so the caller should not run
+        its normal retry logic).
+        """
+        if not self._is_full_res_url(file_url):
+            return False
+
+        status = None
+        response = getattr(exc, "response", None)
+        if response is not None:
+            status = getattr(response, "status_code", None)
+        if status not in (404, None):  # 404 or network error (no response)
+            return False
+
+        with self._retry_lock:
+            already_requeued = file_url in self._requeued_files
+            self._requeued_files.add(file_url)
+
+        if not already_requeued and self._queue is not None:
+            self._safe_emit(
+                self.log,
+                translate(
+                    "log_info",
+                    translate(
+                        "file_404_requeue" if status == 404 else "file_network_requeue",
+                        str(exc),
+                    ),
+                ),
+                "INFO",
+            )
+            self._queue.put_nowait((file_index, file_url))
+            return True
+
+        # Retry already happened (or no queue available): fall back to the
+        # thumbnail and log it as degraded.
+        self._safe_emit(
+            self.log,
+            translate("log_warning", translate("thumbnail_fallback", file_url)),
+            "WARNING",
+        )
+        if await self._download_thumbnail_fallback(
+            file_url, full_path, file_index, total_files
+        ):
+            return True
+
+        # Thumbnail fallback also failed — record as a failed file.
+        self._safe_emit(
+            self.log,
+            translate(
+                "log_error",
+                translate("thumbnail_fallback_failed", file_url, str(exc)),
+            ),
+            "ERROR",
+        )
+        with self.failed_files_lock:
+            self.failed_files[file_url] = str(exc)
+        self._safe_emit(self.file_progress, file_index, 0)
+        self._safe_emit(self.file_completed, file_index, file_url, False)
+        self.check_post_completion(file_url)
+        return True
+
+    async def _download_thumbnail_fallback(
+        self, file_url, full_path, file_index, total_files
+    ):
+        """Download the thumbnail for *file_url* into *full_path* (degraded)."""
+        thumb_url = to_thumbnail_url(file_url, self.domain_config)
+        if not thumb_url or thumb_url == file_url:
+            return False
+        try:
+            headers = get_headers().copy()
+            headers["Referer"] = self.domain_config["referer"]
+
+            def download_with_requests():
+                session = get_session(self.settings.settings_tab)
+                with self._ssl_lock:
+                    if not self.is_running:
+                        raise Exception("Download cancelled before connection")
+                    response = session.get(
+                        thumb_url,
+                        headers=headers,
+                        stream=True,
+                        timeout=(30, 30),
+                    )
+                try:
+                    response.raise_for_status()
+                    with open(full_path, "wb") as fh:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if not self.is_running:
+                                raise Exception("Download interrupted by user")
+                            if chunk:
+                                fh.write(chunk)
+                finally:
+                    response.close()
+
+            await asyncio.to_thread(download_with_requests)
+
+            with open(full_path, "rb") as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+            actual_size = os.path.getsize(full_path)
+            # Store under the ORIGINAL full-res URL hash so later runs don't
+            # waste a request re-trying a file we already know is degraded.
+            self.hash_db.store(
+                hashlib.md5(file_url.encode()).hexdigest(),
+                full_path,
+                file_hash,
+                file_url,
+                actual_size,
+            )
+            self._safe_emit(
+                self.log,
+                translate(
+                    "log_info", translate("thumbnail_fallback_ok", file_url)
+                ),
+                "INFO",
+            )
+            with self.completed_files_lock:
+                self.completed_files.add(file_url)
+            self._safe_emit(self.file_completed, file_index, file_url, True)
+            self.check_post_completion(file_url)
+            return True
+        except Exception as e:
+            self._safe_emit(
+                self.log,
+                translate(
+                    "log_error",
+                    translate("thumbnail_fallback_failed", file_url, str(e)),
+                ),
+                "ERROR",
+            )
+            return False
+
     def check_post_completion(self, file_url):
         post_id = self.files_to_posts_map.get(file_url)
         if post_id in self.post_files_map:
             post_files = self.post_files_map[post_id]
             if all(f in self.completed_files for f in post_files):
+                # Record the fully-downloaded post so it is not re-crawled
+                # on subsequent runs (metadata-level dedup).
+                try:
+                    self.hash_db.mark_post_processed(
+                        self.service, self.creator_id, post_id
+                    )
+                except Exception:
+                    pass
                 self._safe_emit(self.post_completed, post_id)
 
     async def download_worker(self, queue, folder, total_files):
@@ -2083,6 +2306,7 @@ class CreatorDownloadThread(QThread):
             asyncio.set_event_loop(loop)
             try:
                 queue = asyncio.Queue()
+                self._queue = queue  # expose for full-res retry re-enqueueing
                 for i, file_url in enumerate(self.files_to_download):
                     queue.put_nowait((i, file_url))
 
@@ -2151,6 +2375,14 @@ class CreatorDownloadThread(QThread):
                     ),
                     "ERROR",
                 )
+
+        # Mark the creator as fully processed when nothing failed so the
+        # favorites sync can skip re-queueing already-downloaded artists.
+        if self.is_running and not self.failed_files:
+            try:
+                self.hash_db.mark_creator_processed(self.service, self.creator_id)
+            except Exception:
+                pass
 
         if self.is_running:
             self._safe_emit(self.finished)
@@ -2474,6 +2706,17 @@ class CreatorDownloaderTab(QWidget):
         self.fast_mode = False
         self._fast_mode_downloading = False
         self._fast_mode_pending_urls: list[str] = []
+        # Shared HashDB for file-level dedup plus the new post/creator
+        # processed logs used by favorites sync and metadata-level dedup.
+        self.hash_db = None
+        if self.other_files_dir:
+            try:
+                self.hash_db = HashDB(self.other_files_dir)
+            except Exception:
+                self.hash_db = None
+        # Pawchive favorites / import worker state
+        self.favorites_fetch_thread = None
+        self.old_site_thread = None
         os.makedirs(self.cache_dir, exist_ok=True)
         os.makedirs(self.other_files_dir, exist_ok=True)
         self.setup_ui()
@@ -2567,6 +2810,104 @@ class CreatorDownloaderTab(QWidget):
         creator_queue_layout.addWidget(self.creator_queue_list)
         self.creator_queue_group.setLayout(creator_queue_layout)
         left_layout.addWidget(self.creator_queue_group)
+
+        # Pawchive Favorites & Import Group
+        self.pawchive_fav_group = QGroupBox()
+        self.pawchive_fav_group.setStyleSheet(
+            "QGroupBox { color: white; font-weight: bold; padding: 10px; }"
+        )
+        pawchive_fav_layout = QVBoxLayout()
+
+        self.pawchive_api_key_input = QLineEdit()
+        self.pawchive_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pawchive_api_key_input.setPlaceholderText(
+            translate("pawchive_api_key_placeholder")
+        )
+        self.pawchive_api_key_input.setStyleSheet(
+            "padding: 5px; border-radius: 5px; color: white; background: #2A3B5A;"
+        )
+        pawchive_fav_layout.addWidget(self.pawchive_api_key_input)
+
+        pawchive_fav_btn_layout = QHBoxLayout()
+        self.fav_fetch_btn = QPushButton(qta.icon("fa5s.download", color="white"), "")
+        self.fav_fetch_btn.clicked.connect(self.fetch_favorites_and_queue)
+        self.fav_fetch_btn.setStyleSheet(
+            "background: #4A5B7A; padding: 6px; border-radius: 5px;"
+        )
+        pawchive_fav_btn_layout.addWidget(self.fav_fetch_btn)
+        self.fav_sync_btn = QPushButton(qta.icon("fa5s.sync", color="white"), "")
+        self.fav_sync_btn.clicked.connect(self.sync_favorites)
+        self.fav_sync_btn.setStyleSheet(
+            "background: #4A5B7A; padding: 6px; border-radius: 5px;"
+        )
+        pawchive_fav_btn_layout.addWidget(self.fav_sync_btn)
+        pawchive_fav_layout.addLayout(pawchive_fav_btn_layout)
+
+        self.recent_feed_check = QCheckBox()
+        self.recent_feed_check.setChecked(False)  # OFF by default
+        self.recent_feed_check.setStyleSheet("color: white;")
+        pawchive_fav_layout.addWidget(self.recent_feed_check)
+
+        self.fav_json_input = QTextEdit()
+        self.fav_json_input.setPlaceholderText(translate("favorites_json_placeholder"))
+        self.fav_json_input.setFixedHeight(56)
+        self.fav_json_input.setStyleSheet(
+            "background: #2A3B5A; border-radius: 5px; padding: 5px; color: white;"
+        )
+        pawchive_fav_layout.addWidget(self.fav_json_input)
+
+        fav_json_btn_layout = QHBoxLayout()
+        self.import_json_file_btn = QPushButton(
+            qta.icon("fa5s.file-import", color="white"), ""
+        )
+        self.import_json_file_btn.clicked.connect(self.import_favorites_json_file)
+        self.import_json_file_btn.setStyleSheet(
+            "background: #4A5B7A; padding: 6px; border-radius: 5px;"
+        )
+        fav_json_btn_layout.addWidget(self.import_json_file_btn)
+        self.queue_json_btn = QPushButton(
+            qta.icon("fa5s.layer-group", color="white"), ""
+        )
+        self.queue_json_btn.clicked.connect(self.queue_pasted_json)
+        self.queue_json_btn.setStyleSheet(
+            "background: #4A5B7A; padding: 6px; border-radius: 5px;"
+        )
+        fav_json_btn_layout.addWidget(self.queue_json_btn)
+        pawchive_fav_layout.addLayout(fav_json_btn_layout)
+
+        old_site_layout = QGridLayout()
+        self.old_site_domain_input = QLineEdit()
+        self.old_site_domain_input.setPlaceholderText(
+            translate("old_site_domain_placeholder")
+        )
+        self.old_site_domain_input.setStyleSheet(
+            "padding: 5px; border-radius: 5px; color: white; background: #2A3B5A;"
+        )
+        old_site_layout.addWidget(self.old_site_domain_input, 0, 0)
+        self.old_site_cred_input = QLineEdit()
+        self.old_site_cred_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.old_site_cred_input.setPlaceholderText(
+            translate("old_site_cred_placeholder")
+        )
+        self.old_site_cred_input.setStyleSheet(
+            "padding: 5px; border-radius: 5px; color: white; background: #2A3B5A;"
+        )
+        old_site_layout.addWidget(self.old_site_cred_input, 1, 0)
+        self.crawl_old_site_btn = QPushButton(
+            qta.icon("fa5s.search", color="white"), ""
+        )
+        self.crawl_old_site_btn.clicked.connect(self.crawl_old_site_favorites)
+        self.crawl_old_site_btn.setStyleSheet(
+            "background: #4A5B7A; padding: 6px; border-radius: 5px;"
+        )
+        old_site_layout.addWidget(self.crawl_old_site_btn, 0, 1, 2, 1)
+        pawchive_fav_layout.addLayout(old_site_layout)
+
+        self.pawchive_fav_group.setLayout(pawchive_fav_layout)
+        left_layout.addWidget(self.pawchive_fav_group)
+
+        # Pre-fill the API key / recent-feed toggle from persisted settings.
+        self._load_fav_settings()
 
         # Download Options Group
         self.creator_options_group = QGroupBox()
@@ -2894,6 +3235,24 @@ class CreatorDownloaderTab(QWidget):
         self.creator_expand_logs_btn.setText(translate("expand_logs"))
 
         self.creator_search_input.setPlaceholderText(translate("search_posts"))
+
+        self.pawchive_fav_group.setTitle(translate("pawchive_fav_group"))
+        self.pawchive_api_key_input.setPlaceholderText(
+            translate("pawchive_api_key_placeholder")
+        )
+        self.fav_fetch_btn.setText(translate("fetch_favorites_btn"))
+        self.fav_sync_btn.setText(translate("sync_favorites_btn"))
+        self.recent_feed_check.setText(translate("monitor_recent_feed"))
+        self.fav_json_input.setPlaceholderText(translate("favorites_json_placeholder"))
+        self.import_json_file_btn.setText(translate("import_favorites_json_btn"))
+        self.queue_json_btn.setText(translate("queue_pasted_json_btn"))
+        self.old_site_domain_input.setPlaceholderText(
+            translate("old_site_domain_placeholder")
+        )
+        self.old_site_cred_input.setPlaceholderText(
+            translate("old_site_cred_placeholder")
+        )
+        self.crawl_old_site_btn.setText(translate("crawl_old_site_btn"))
 
         self.update_creator_queue_list()
 
@@ -3319,6 +3678,18 @@ class CreatorDownloaderTab(QWidget):
         self.creator_add_from_file_btn.setEnabled(not is_fetching)
         self.creator_queue_list.setEnabled(not is_fetching)
 
+        # Pawchive favorites / import controls
+        self.pawchive_api_key_input.setEnabled(not is_fetching)
+        self.fav_fetch_btn.setEnabled(not is_fetching)
+        self.fav_sync_btn.setEnabled(not is_fetching)
+        self.recent_feed_check.setEnabled(not is_fetching)
+        self.fav_json_input.setEnabled(not is_fetching)
+        self.import_json_file_btn.setEnabled(not is_fetching)
+        self.queue_json_btn.setEnabled(not is_fetching)
+        self.old_site_domain_input.setEnabled(not is_fetching)
+        self.old_site_cred_input.setEnabled(not is_fetching)
+        self.crawl_old_site_btn.setEnabled(not is_fetching)
+
         # Post operations
         self.creator_search_input.setEnabled(not is_fetching)
         self.creator_check_all.setEnabled(not is_fetching)
@@ -3364,6 +3735,18 @@ class CreatorDownloaderTab(QWidget):
         # Multi-URL fast mode inputs
         self.creator_multi_url_input.setEnabled(enabled)
         self.creator_multi_url_add_btn.setEnabled(enabled)
+
+        # Pawchive favorites / import controls
+        self.pawchive_api_key_input.setEnabled(enabled)
+        self.fav_fetch_btn.setEnabled(enabled)
+        self.fav_sync_btn.setEnabled(enabled)
+        self.recent_feed_check.setEnabled(enabled)
+        self.fav_json_input.setEnabled(enabled)
+        self.import_json_file_btn.setEnabled(enabled)
+        self.queue_json_btn.setEnabled(enabled)
+        self.old_site_domain_input.setEnabled(enabled)
+        self.old_site_cred_input.setEnabled(enabled)
+        self.crawl_old_site_btn.setEnabled(enabled)
 
         # Category checkboxes
         self.creator_main_check.setEnabled(enabled)
@@ -3769,6 +4152,7 @@ class CreatorDownloaderTab(QWidget):
             self.creator_content_check.isChecked(),
             self._create_thread_settings(),
             max_concurrent=5,
+            hash_db=self.hash_db,
         )
         self.file_preparation_thread.progress.connect(self.update_background_progress)
         self.file_preparation_thread.finished.connect(
@@ -4827,6 +5211,331 @@ class CreatorDownloaderTab(QWidget):
         if hasattr(self, "logs_window") and self.logs_window.isVisible():
             self.logs_window.update_logs_content()
 
+    # ------------------------------------------------------------------
+    # Pawchive favorites batch / sync / import
+    # ------------------------------------------------------------------
+
+    def _fav_session(self):
+        """Return the application's proxy-aware requests session, if available."""
+        if self._parent and hasattr(self._parent, "settings_tab"):
+            try:
+                return get_session(self._parent.settings_tab)
+            except Exception:
+                return None
+        return None
+
+    def _settings_tab(self):
+        if self._parent and hasattr(self._parent, "settings_tab"):
+            return self._parent.settings_tab
+        return None
+
+    def _load_fav_settings(self):
+        """Restore the persisted API key and recent-feed toggle into the UI."""
+        st = self._settings_tab()
+        if st is None:
+            return
+        try:
+            api_key = st.get_pawchive_api_key()
+            if api_key:
+                self.pawchive_api_key_input.setText(api_key)
+            self.recent_feed_check.setChecked(st.is_recent_posts_feed_enabled())
+        except Exception:
+            pass
+
+    def _save_fav_settings(self):
+        """Persist the API key and recent-feed toggle from the UI."""
+        st = self._settings_tab()
+        if st is None:
+            return
+        try:
+            st.set_pawchive_api_key(self.pawchive_api_key_input.text().strip())
+            st.set_monitor_recent_posts_feed(self.recent_feed_check.isChecked())
+        except Exception:
+            pass
+
+    def _queue_creator_url(self, url):
+        """Append a creator URL to the queue, skipping duplicates."""
+        normalized = url.rstrip("/")
+        for item in self.creator_queue:
+            if item[0].rstrip("/") == normalized:
+                return False
+        self.creator_queue.append((url, False))
+        return True
+
+    def _queue_artists(self, entries, domain=None, skip_processed=False):
+        """Queue ``(service, id, name)`` artists for batch download.
+
+        Returns ``(added, skipped)``.  When *skip_processed* is true, artists
+        already recorded as fully downloaded are skipped.
+        """
+        added = 0
+        skipped = 0
+        processed_set = set()
+        if skip_processed and self.hash_db is not None:
+            try:
+                processed_set = self.hash_db.get_processed_creators()
+            except Exception:
+                processed_set = set()
+        for entry in entries:
+            service, creator_id, _name = entry
+            service = (service or "").strip().lower()
+            creator_id = str(creator_id or "").strip()
+            if not service or not creator_id:
+                skipped += 1
+                continue
+            if (service, creator_id) in processed_set:
+                skipped += 1
+                continue
+            url = pawchive.build_creator_url(service, creator_id, domain)
+            if self._queue_creator_url(url):
+                added += 1
+            else:
+                skipped += 1
+        if added:
+            self.update_creator_queue_list()
+        return added, skipped
+
+    def fetch_favorites_and_queue(self):
+        """Fetch the authenticated Pawchive favorites list and queue the artists."""
+        api_key = self.pawchive_api_key_input.text().strip()
+        self._save_fav_settings()
+        if not api_key:
+            self.append_log_to_console(
+                translate("log_error", translate("favorites_no_api_key")), "ERROR"
+            )
+            return
+        if (
+            self.favorites_fetch_thread is not None
+            and self.favorites_fetch_thread.isRunning()
+        ):
+            self.append_log_to_console(
+                translate("log_warning", translate("favorites_fetch_in_progress")),
+                "WARNING",
+            )
+            return
+        self.append_log_to_console(
+            translate("log_info", translate("favorites_fetching")), "INFO"
+        )
+        self.favorites_fetch_thread = FavoritesFetchThread(
+            api_key=api_key,
+            include_recent=self.recent_feed_check.isChecked(),
+            session=self._fav_session(),
+            sync_mode=False,
+        )
+        self.favorites_fetch_thread.result.connect(self._on_favorites_fetched)
+        self.favorites_fetch_thread.log.connect(self.append_log_to_console)
+        self.favorites_fetch_thread.error.connect(
+            lambda msg: self.append_log_to_console(translate("log_error", msg), "ERROR")
+        )
+        self.favorites_fetch_thread.finished.connect(
+            self._cleanup_favorites_fetch_thread
+        )
+        self.active_threads.append(self.favorites_fetch_thread)
+        self.favorites_fetch_thread.start()
+
+    def sync_favorites(self):
+        """Re-fetch favorites and add only artists not already queued/processed."""
+        api_key = self.pawchive_api_key_input.text().strip()
+        self._save_fav_settings()
+        if not api_key:
+            self.append_log_to_console(
+                translate("log_error", translate("favorites_no_api_key")), "ERROR"
+            )
+            return
+        if (
+            self.favorites_fetch_thread is not None
+            and self.favorites_fetch_thread.isRunning()
+        ):
+            self.append_log_to_console(
+                translate("log_warning", translate("favorites_fetch_in_progress")),
+                "WARNING",
+            )
+            return
+        self.append_log_to_console(
+            translate("log_info", translate("favorites_syncing")), "INFO"
+        )
+        self.favorites_fetch_thread = FavoritesFetchThread(
+            api_key=api_key,
+            include_recent=self.recent_feed_check.isChecked(),
+            session=self._fav_session(),
+            sync_mode=True,
+        )
+        self.favorites_fetch_thread.result.connect(self._on_favorites_fetched)
+        self.favorites_fetch_thread.log.connect(self.append_log_to_console)
+        self.favorites_fetch_thread.error.connect(
+            lambda msg: self.append_log_to_console(translate("log_error", msg), "ERROR")
+        )
+        self.favorites_fetch_thread.finished.connect(
+            self._cleanup_favorites_fetch_thread
+        )
+        self.active_threads.append(self.favorites_fetch_thread)
+        self.favorites_fetch_thread.start()
+
+    def _on_favorites_fetched(self, result):
+        artists = result.get("artists", [])
+        recent = result.get("recent", [])
+        sync_mode = bool(result.get("sync_mode", False))
+        added, skipped = self._queue_artists(artists, skip_processed=sync_mode)
+        if recent:
+            recent_added, _recent_skipped = self._queue_artists(
+                recent, skip_processed=sync_mode
+            )
+            self.append_log_to_console(
+                translate(
+                    "log_info", translate("recent_feed_fetched", recent_added)
+                ),
+                "INFO",
+            )
+        if sync_mode:
+            self.append_log_to_console(
+                translate(
+                    "log_info", translate("favorites_sync_done", added, skipped)
+                ),
+                "INFO",
+            )
+        else:
+            self.append_log_to_console(
+                translate(
+                    "log_info", translate("favorites_queued_count", added)
+                ),
+                "INFO",
+            )
+            if skipped:
+                self.append_log_to_console(
+                    translate(
+                        "log_info", translate("favorites_skipped_count", skipped)
+                    ),
+                    "INFO",
+                )
+
+    def _cleanup_favorites_fetch_thread(self):
+        if self.favorites_fetch_thread is not None:
+            if self.favorites_fetch_thread in self.active_threads:
+                self.active_threads.remove(self.favorites_fetch_thread)
+            self.favorites_fetch_thread.deleteLater()
+            self.favorites_fetch_thread = None
+
+    def import_favorites_json_file(self):
+        """Queue artists parsed from a favorites JSON export file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            translate("select_favorites_json"),
+            "",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not file_path:
+            return
+        try:
+            entries = pawchive.parse_json_file(file_path)
+        except Exception as e:
+            self.append_log_to_console(
+                translate(
+                    "log_error", translate("json_import_invalid", str(e))
+                ),
+                "ERROR",
+            )
+            return
+        self._queue_json_entries(entries)
+
+    def queue_pasted_json(self):
+        """Queue artists parsed from JSON pasted into the text area."""
+        text = self.fav_json_input.toPlainText().strip()
+        if not text:
+            self.append_log_to_console(
+                translate("log_error", translate("json_import_empty")), "ERROR"
+            )
+            return
+        try:
+            entries = pawchive.parse_favorites_json_text(text)
+        except Exception as e:
+            self.append_log_to_console(
+                translate(
+                    "log_error", translate("json_import_invalid", str(e))
+                ),
+                "ERROR",
+            )
+            return
+        self._queue_json_entries(entries)
+        self.fav_json_input.clear()
+
+    def _queue_json_entries(self, entries):
+        added, skipped = self._queue_artists(entries, skip_processed=False)
+        self.append_log_to_console(
+            translate("log_info", translate("json_import_parsed", len(entries))),
+            "INFO",
+        )
+        self.append_log_to_console(
+            translate("log_info", translate("favorites_queued_count", added)),
+            "INFO",
+        )
+        if skipped:
+            self.append_log_to_console(
+                translate(
+                    "log_info", translate("favorites_skipped_count", skipped)
+                ),
+                "INFO",
+            )
+
+    def crawl_old_site_favorites(self):
+        """Crawl the favorites list from a previous Kemono-family site."""
+        domain = self.old_site_domain_input.text().strip().rstrip("/")
+        credential = self.old_site_cred_input.text().strip()
+        if not domain:
+            self.append_log_to_console(
+                translate("log_error", translate("old_site_no_domain")), "ERROR"
+            )
+            return
+        if not credential:
+            self.append_log_to_console(
+                translate("log_error", translate("old_site_no_cred")), "ERROR"
+            )
+            return
+        if self.old_site_thread is not None and self.old_site_thread.isRunning():
+            self.append_log_to_console(
+                translate("log_warning", translate("old_site_crawl_in_progress")),
+                "WARNING",
+            )
+            return
+        self.append_log_to_console(
+            translate("log_info", translate("old_site_crawling", domain)), "INFO"
+        )
+        self.old_site_thread = OldSiteFavoritesThread(
+            domain=domain, credential=credential, session=self._fav_session()
+        )
+        self.old_site_thread.result.connect(self._on_old_site_crawled)
+        self.old_site_thread.log.connect(self.append_log_to_console)
+        self.old_site_thread.error.connect(
+            lambda msg: self.append_log_to_console(translate("log_error", msg), "ERROR")
+        )
+        self.old_site_thread.finished.connect(self._cleanup_old_site_thread)
+        self.active_threads.append(self.old_site_thread)
+        self.old_site_thread.start()
+
+    def _on_old_site_crawled(self, entries):
+        added, skipped = self._queue_artists(entries, skip_processed=False)
+        self.append_log_to_console(
+            translate(
+                "log_info",
+                translate(
+                    "old_site_crawled",
+                    len(entries),
+                    self.old_site_domain_input.text().strip(),
+                ),
+            ),
+            "INFO",
+        )
+        self.append_log_to_console(
+            translate("log_info", translate("favorites_queued_count", added)),
+            "INFO",
+        )
+
+    def _cleanup_old_site_thread(self):
+        if self.old_site_thread is not None:
+            if self.old_site_thread in self.active_threads:
+                self.active_threads.remove(self.old_site_thread)
+            self.old_site_thread.deleteLater()
+            self.old_site_thread = None
+
     def add_creators_from_file(self):
         """Open a text file and add all links line by line to the queue"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -4922,6 +5631,66 @@ class CreatorDownloaderTab(QWidget):
             error_msg = translate("file_read_error", str(e))
             self.append_log_to_console(translate("log_error", error_msg), "ERROR")
             QMessageBox.critical(self, translate("file_read_error_title"), error_msg)
+
+
+class FavoritesFetchThread(QThread):
+    """Fetch the authenticated Pawchive favorites list off the UI thread."""
+
+    result = pyqtSignal(dict)
+    log = pyqtSignal(str, str)
+    error = pyqtSignal(str)
+
+    def __init__(self, api_key, include_recent=False, session=None, sync_mode=False):
+        super().__init__()
+        self.api_key = api_key
+        self.include_recent = include_recent
+        self.session = session
+        self.sync_mode = sync_mode
+        self.is_running = True
+
+    def stop(self):
+        self.is_running = False
+
+    def run(self):
+        try:
+            artists = pawchive.fetch_favorites(
+                api_key=self.api_key, session=self.session
+            )
+            recent = []
+            if self.include_recent:
+                recent = pawchive.fetch_recent_posts_creators(session=self.session)
+            self.result.emit(
+                {"artists": artists, "recent": recent, "sync_mode": self.sync_mode}
+            )
+        except Exception as e:
+            self.error.emit(translate("favorites_fetch_failed", str(e)))
+
+
+class OldSiteFavoritesThread(QThread):
+    """Crawl a previous Kemono-family site's favorites list off the UI thread."""
+
+    result = pyqtSignal(list)
+    log = pyqtSignal(str, str)
+    error = pyqtSignal(str)
+
+    def __init__(self, domain, credential, session=None):
+        super().__init__()
+        self.domain = domain
+        self.credential = credential
+        self.session = session
+        self.is_running = True
+
+    def stop(self):
+        self.is_running = False
+
+    def run(self):
+        try:
+            entries = pawchive.fetch_old_site_favorites(
+                self.domain, self.credential, session=self.session
+            )
+            self.result.emit(entries)
+        except Exception as e:
+            self.error.emit(translate("old_site_crawl_failed", str(e)))
 
 
 class CancellationThread(QThread):
