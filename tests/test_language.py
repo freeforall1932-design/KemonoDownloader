@@ -269,6 +269,23 @@ class TestCommonTranslationKeys:
             result = translate(key)
             assert result != key, f"Translation key '{key}' is missing"
 
+    def test_help_thumbnail_favorites_fast_mode_keys(self):
+        """Help sections added in 5.13.0 exist in all languages."""
+        keys = [
+            "help_thumbnail_title",
+            "help_thumbnail_text",
+            "help_favorites_title",
+            "help_favorites_text",
+            "help_fast_mode_title",
+            "help_fast_mode_text",
+            "favorites_no_api_key",
+        ]
+        for key in keys:
+            for lang in language_manager.get_available_languages():
+                language_manager.set_language(lang)
+                result = translate(key)
+                assert result != key, f"Translation key '{key}' is missing in {lang}"
+
 
 class TestTranslationConsistency:
     """Tests for translation consistency across languages."""

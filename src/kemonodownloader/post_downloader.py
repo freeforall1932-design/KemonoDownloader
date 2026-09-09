@@ -152,6 +152,10 @@ def _build_headers() -> dict:
 
 HEADERS = None  # Built lazily via get_headers()
 
+# Worker threads may stream large files. A 30s is_alive() poll let QThread.run()
+# return while daemons were still alive (risking "QThread destroyed while running").
+WORKER_JOIN_TIMEOUT_SECONDS = 180
+
 
 def get_headers() -> dict:
     global HEADERS
@@ -1298,7 +1302,7 @@ class FilePreparationThread(QThread):
         # Thread.join() internally uses Event.wait() which triggers
         # Condition.notify() access violations on Python 3.14 + Windows,
         # so poll is_alive() instead.
-        _deadline = time.monotonic() + 30
+        _deadline = time.monotonic() + WORKER_JOIN_TIMEOUT_SECONDS
         for w in workers:
             while w.is_alive() and time.monotonic() < _deadline:
                 time.sleep(0.05)
@@ -2010,7 +2014,7 @@ class DownloadThread(QThread):
             # Thread.join() internally uses Event.wait() which triggers
             # Condition.notify() access violations on Python 3.14 + Windows,
             # so poll is_alive() instead.
-            _deadline = time.monotonic() + 30
+            _deadline = time.monotonic() + WORKER_JOIN_TIMEOUT_SECONDS
             for w in workers:
                 while w.is_alive() and time.monotonic() < _deadline:
                     time.sleep(0.05)
@@ -2048,7 +2052,7 @@ class DownloadThread(QThread):
                     )
                     t.start()
                     workers.append(t)
-                _deadline = time.monotonic() + 30
+                _deadline = time.monotonic() + WORKER_JOIN_TIMEOUT_SECONDS
                 for w in workers:
                     while w.is_alive() and time.monotonic() < _deadline:
                         time.sleep(0.05)
@@ -2697,7 +2701,10 @@ class PostDownloaderTab(QWidget):
     def check_post_url_validity(self, url):
         url = url.rstrip("/")
         parts = url.split("/")
-        if len(parts) < 7 or get_domain_config(url)["domain"] not in url:
+        known_domains = get_domains()
+        if not any(domain in url for domain in known_domains):
+            return False
+        if len(parts) < 7 or "user" not in parts or "post" not in parts:
             return False
 
         try:
@@ -2720,14 +2727,14 @@ class PostDownloaderTab(QWidget):
                 url, headers=fallback_headers, timeout=10
             )
 
+            # HTTP 200 is enough. Do not require "kemono"/"coomer" in HTML —
+            # Pawchive (and other listed domains) would otherwise fail validation.
             if direct_response.status_code == 200:
-                content = direct_response.text.lower()
-                if "kemono" in content or "coomer" in content:
-                    self.append_log_to_console(
-                        translate("log_info", translate("url_validated_fallback", url)),
-                        "INFO",
-                    )
-                    return True
+                self.append_log_to_console(
+                    translate("log_info", translate("url_validated_fallback", url)),
+                    "INFO",
+                )
+                return True
 
         except requests.RequestException as e:
             self.append_log_to_console(

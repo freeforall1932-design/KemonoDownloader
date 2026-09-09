@@ -76,3 +76,7 @@ debug_*.py
 
 # database
 *.db*
+
+# Packed browser-extension artifacts (do not ship in the repo)
+*.xpi
+*.crx

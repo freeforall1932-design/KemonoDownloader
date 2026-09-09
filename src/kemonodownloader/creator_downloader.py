@@ -49,6 +49,10 @@ from kemonodownloader.hash_db import HashDB
 from kemonodownloader.kd_language import translate
 from kemonodownloader import pawchive
 
+# Worker threads may stream large files. A 30s is_alive() poll let QThread.run()
+# return while daemons were still alive (risking "QThread destroyed while running").
+WORKER_JOIN_TIMEOUT_SECONDS = 180
+
 
 class ThreadSettings:
     """Settings container for thread operations"""
@@ -1347,7 +1351,7 @@ class FilePreparationThread(QThread):
         # Thread.join() internally uses Event.wait() which triggers
         # Condition.notify() access violations on Python 3.14 + Windows,
         # so poll is_alive() instead.
-        _deadline = time.monotonic() + 30
+        _deadline = time.monotonic() + WORKER_JOIN_TIMEOUT_SECONDS
         for w in workers:
             while w.is_alive() and time.monotonic() < _deadline:
                 time.sleep(0.05)
@@ -2439,13 +2443,10 @@ class ValidationThread(QThread):
                 direct_response = get_session(self.settings.settings_tab).get(
                     self.url, headers=fallback_headers, timeout=10
                 )
-                domain_check = self.domain_config["domain"].split(".")[
-                    0
-                ]  # 'kemono' or 'coomer'
-                if (
-                    direct_response.status_code == 200
-                    and domain_check in direct_response.text.lower()
-                ):
+                # HTTP 200 is enough. Do not require the domain stem ("kemono",
+                # "coomer", "pawchive") in HTML — that gate rejected Pawchive
+                # pages whose markup does not contain the site name.
+                if direct_response.status_code == 200:
                     self.log.emit(
                         translate(
                             "log_info",
@@ -5007,22 +5008,6 @@ class CreatorDownloaderTab(QWidget):
         item.setData(Qt.UserRole, url)
         post_id = self.post_url_map[text][0]
         item.setData(Qt.UserRole + 1, post_id)
-        widget = QWidget()
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
-
-        check_box = QCheckBox()
-        check_box.setStyleSheet("color: white;")
-        check_box.setChecked(is_checked)
-        check_box.clicked.connect(lambda: self.toggle_checkbox_state(text))
-        layout.addWidget(check_box)
-
-        label = QLabel(text)
-        label.setStyleSheet("color: white;")
-        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        layout.addWidget(label, stretch=1)
-
         widget = QWidget()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)

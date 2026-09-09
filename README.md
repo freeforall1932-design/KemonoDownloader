@@ -40,7 +40,7 @@
     <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms">
   </a>
   <a href="https://github.com/VoxDroid/KemonoDownloader/releases">
-    <img src="https://img.shields.io/badge/version-v5.12.0-brightgreen" alt="Version">
+    <img src="https://img.shields.io/badge/version-v5.13.0-brightgreen" alt="Version">
   </a>
   <a>
     <img src="https://img.shields.io/github/v/release/VoxDroid/KemonoDownloader?label=Latest%20Release" alt="Latest Release">
@@ -346,7 +346,7 @@ Support ongoing development and get access here: **[Ko-fi Binaries Page](https:/
    - **Note**: An internet connection is required to fetch content from Kemono.cr, Coomer.st, and Pawchive.pw.
 
 ## $\color{#546e7a}{\sf{\text{Usage}}}$ <a name="usage"></a>
-Upon launching, you’ll see an introductory screen with a "Launch" button. Click it to enter the main interface, featuring four tabs: **Post Downloader**, **Creator Downloader**, **Settings**, and **Help**. The in-app Help tab contains a comprehensive user manual.
+Upon launching, you’ll see an introductory screen with a "Launch" button. Click it to enter the main interface, featuring six tabs: **Post Downloader**, **Creator Downloader**, **Thumbnail Downloader**, **Settings**, **Help**, and **Browser Extension**. The in-app Help tab contains a comprehensive user manual.
 
 ### $\color{#90a4ae}{\sf{\text{Getting Started}}}$ <a name="getting-started"></a>
 - The application creates default directories (`Downloads`, `Cache`, `Other Files`) in the specified save location.
@@ -368,6 +368,7 @@ Upon launching, you’ll see an introductory screen with a "Launch" button. Clic
   2. Click "Add to Queue" to add it to the list.
   3. Click the eye icon to fetch posts, configure options (Main File, Attachments, Content Images), and select posts.
   4. Click "Download" to begin, and track progress via the interface.
+  5. Optional (Pawchive): enter an API key under **Pawchive Favorites & Import** to fetch/sync favorites, paste a favorites JSON export, or crawl an old-site favorites list into the queue.
 
 ### $\color{#90a4ae}{\sf{\text{Thumbnail Downloader Tab}}}$ <a name="thumbnail-downloader-tab"></a>
 - **Purpose**: Download thumbnails and post text descriptions when primary media servers are down or offline.

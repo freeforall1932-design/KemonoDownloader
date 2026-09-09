@@ -8,7 +8,6 @@ pillow
 briefcase
 fake-useragent
 aiohttp
-asyncio
 PySocks
 pre-commit
 mypy 

@@ -41,11 +41,17 @@ DOMAIN_LIST_URL = (
     "/refs/heads/main/assets/config/domain"
 )
 
-# Path to the bundled fallback file (assets/config/domain) relative to this
-# source file:  src/kemonodownloader/domain_config.py
-#               ↑ two levels up → repo root → assets/config/domain
+# Local domain-list candidates. Briefcase packages only
+# ``src/kemonodownloader``, so the copy under ``resources/config/domain`` is
+# the one that ships in the built app. The repo-root ``assets/config/domain``
+# path is kept for running from a source checkout.
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_LOCAL_DOMAIN_FILE = os.path.join(_HERE, "..", "..", "assets", "config", "domain")
+_LOCAL_DOMAIN_CANDIDATES = [
+    os.path.join(_HERE, "resources", "config", "domain"),
+    os.path.join(_HERE, "..", "..", "assets", "config", "domain"),
+]
+# Backwards-compatible alias (tests / callers that imported this name).
+_LOCAL_DOMAIN_FILE = _LOCAL_DOMAIN_CANDIDATES[0]
 
 # Hardcoded last-resort fallback (used when both remote fetch and local file
 # are unavailable).
@@ -82,15 +88,16 @@ def _fetch_remote_domains() -> Optional[List[str]]:
 
 
 def _load_local_domains() -> Optional[List[str]]:
-    """Attempt to read the bundled assets/config/domain file."""
-    try:
-        path = os.path.normpath(_LOCAL_DOMAIN_FILE)
-        with open(path, encoding="utf-8") as fh:
-            domains = _load_domains_from_text(fh.read())
-            if domains:
-                return domains
-    except Exception:
-        pass
+    """Attempt to read a bundled domain list (packaged copy, then repo copy)."""
+    for candidate in _LOCAL_DOMAIN_CANDIDATES:
+        try:
+            path = os.path.normpath(candidate)
+            with open(path, encoding="utf-8") as fh:
+                domains = _load_domains_from_text(fh.read())
+                if domains:
+                    return domains
+        except Exception:
+            continue
     return None
 
 

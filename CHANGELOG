@@ -1,5 +1,16 @@
 # Kemono Downloader Release Notes
 
+## v5.13.0 (09 September 2026)
+**fix: Pawchive-safe URL validation, packaged domain list, and six-tab docs**
+
+- Post and Creator URL validation no longer require `"kemono"` / `"coomer"` (or the domain stem) in HTML. Known domains from `get_domains()` plus `/user/` + `/post/` (posts) or `/user/` (creators) and HTTP 200 are enough, so Pawchive pages validate.
+- Bundle `assets/config/domain` at `src/kemonodownloader/resources/config/domain` so Briefcase packages (which only include `src/kemonodownloader`) still have a local domain list when offline.
+- Stop shipping `kemono_downloader-1.2.8.xpi`; ignore `*.xpi` / `*.crx`.
+- Help tab documents Thumbnail Downloader, Pawchive favorites/import, and Fast Mode.
+- Browser extension host permissions include Pawchive; `manifest.json` is a usable Chrome MV3 copy of `chrome_manifest.json`.
+- README / landing-page i18n: six tabs (Post, Creator, Thumbnail, Settings, Help, Browser Extension). `SECURITY.md` tracks v5.13.0+. Drop stdlib `asyncio` from `requirements.txt`. Pyproject description includes Pawchive.
+- Raise worker `is_alive()` join timeout from 30s to 180s. Remove duplicate widget construction in Creator `add_list_item`.
+
 ## v5.12.0 (01 August 2026)
 **feat: Thumbnail Downloader tab, Auto Rename by order, and Post Text description downloading**
 
