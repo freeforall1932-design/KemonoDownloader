@@ -2200,11 +2200,13 @@ class KDLanguage:
                 "- Below the title, you'll see the developer's name ('Developed by VoxDroid') and a clickable link to the GitHub repository (github.com/VoxDroid) for updates and support.<br>"
                 "- Click the 'Launch' button in the center of the screen to proceed to the main interface.<br><br>"
                 "<b>1.2 Main Interface Overview</b><br>"
-                "The main interface is divided into four tabs, each serving a specific purpose:<br>"
+                "The main interface is divided into six tabs, each serving a specific purpose:<br>"
                 "  - <b>Post Downloader</b>: Use this tab to download files from specific Kemono.cr posts by entering their URLs. Ideal for downloading individual posts.<br>"
                 "  - <b>Creator Downloader</b>: Use this tab to download content from an entire creator's profile, fetching all their posts and associated files.<br>"
+                "  - <b>Thumbnail Downloader</b>: Download post or creator thumbnails (and optional post text) even when full-resolution media servers are down.<br>"
                 "  - <b>Settings</b>: Configure the application's behavior, such as save directories, simultaneous downloads, and UI preferences.<br>"
-                "  - <b>Help</b>: You're here! This tab provides this comprehensive user manual to guide you through using the application.<br><br>"
+                "  - <b>Help</b>: You're here! This tab provides this comprehensive user manual to guide you through using the application.<br>"
+                "  - <b>Browser Extension</b>: Install and use the standalone browser extension for Kemono, Coomer, and Pawchive pages.<br><br>"
                 "<b>1.3 Interface Elements</b><br>"
                 "- <b>Tabs</b>: Located at the top of the main interface, the tabs are styled with icons and labels. The active tab is highlighted with a darker background.<br>"
                 "- <b>Status Bar</b>: At the bottom of the window, a status label (e.g., 'Idle') indicates the application's current state. It updates during operations like downloading.<br>"
@@ -2220,9 +2222,10 @@ class KDLanguage:
                 "- タイトルの下には、開発者名（「Developed by VoxDroid」）と、更新やサポートのためのGitHubリポジトリへのクリック可能なリンク（github.com/VoxDroid）が表示されます。<br>"
                 "- 画面中央の「起動」ボタンをクリックしてメインインターフェースに進みます。<br><br>"
                 "<b>1.2 メインインターフェースの概要</b><br>"
-                "メインインターフェースは4つのタブに分かれており、それぞれ特定の目的を持っています：<br>"
+                "メインインターフェースは6つのタブに分かれており、それぞれ特定の目的を持っています：<br>"
                 "  - <b>投稿ダウンローダー</b>：このタブを使用して、URLを入力することで特定のKemono.su投稿からファイルをダウンロードします。個々の投稿のダウンロードに最適です。<br>"
                 "  - <b>クリエイターダウンローダー</b>：このタブを使用して、クリエイター全体のプロフィールからコンテンツをダウンロードし、すべての投稿と関連ファイルをフェッチします。<br>"
+                "  - <b>サムネイルダウンローダー</b>：フル解像度メディアサーバーが停止していても、投稿またはクリエイターのサムネイル（および任意の投稿テキスト）をダウンロードします。<br>"
                 "  - <b>設定</b>：保存ディレクトリ、同時ダウンロード数、UI設定など、アプリケーションの動作を設定します。<br>"
                 "  - <b>ヘルプ</b>：ここです！このタブは、アプリケーションの使用をガイドする包括的なユーザーマニュアルを提供します。<br><br>"
                 "<b>1.3 インターフェース要素</b><br>"
@@ -2240,9 +2243,10 @@ class KDLanguage:
                 "- 제목 아래에는 개발자 이름('Developed by VoxDroid')과 업데이트 및 지원을 위한 GitHub 저장소에 대한 클릭 가능한 링크(github.com/VoxDroid)가 표시됩니다.<br>"
                 "- 화면 중앙의 '실행' 버튼을 클릭하여 메인 인터페이스로 이동합니다。<br><br>"
                 "<b>1.2 메인 인터페이스 개요</b><br>"
-                "메인 인터페이스는 네 개의 탭으로 나뉘며, 각 탭은 특정 목적을 제공합니다:<br>"
+                "메인 인터페이스는 여섯 개의 탭으로 나뉘며, 각 탭은 특정 목적을 제공합니다:<br>"
                 "  - <b>게시물 다운로더</b>: 이 탭을 사용하여 URL을 입력함으로써 특정 Kemono.cr 게시물에서 파일을 다운로드합니다. 개별 게시물 다운로드에 이상적입니다.<br>"
                 "  - <b>크리에이터 다운로더</b>: 이 탭을 사용하여 크리에이터 전체 프로필에서 콘텐츠를 다운로드하며, 모든 게시물과 관련 파일을 가져옵니다.<br>"
+                "  - <b>썸네일 다운로더</b>: 전체 해상도 미디어 서버가 다운되어도 게시물 또는 크리에이터 썸네일(및 선택적 게시물 텍스트)을 다운로드합니다.<br>"
                 "  - <b>설정</b>: 저장 디렉토리, 동시 다운로드 수, UI 설정 등 애플리케이션 동작을 구성합니다.<br>"
                 "  - <b>도움말</b>: 여기입니다! 이 탭은 애플리케이션 사용을 안내하는 포괄적인 사용자 매뉴얼을 제공합니다.<br><br>"
                 "<b>1.3 인터페이스 요소</b><br>"
@@ -2260,9 +2264,10 @@ class KDLanguage:
                 "- 标题下方显示开发者的名称（“Developed by VoxDroid”）以及指向 GitHub 仓库（github.com/VoxDroid）的可点击链接，以获取更新和支持。<br>"
                 "- 点击屏幕中央的“启动”按钮进入主界面。<br><br>"
                 "<b>1.2 主界面概览</b><br>"
-                "主界面分为四个选项卡，每个选项卡都有特定用途：<br>"
+                "主界面分为六个选项卡，每个选项卡都有特定用途：<br>"
                 "  - <b>帖子下载器</b>：使用此选项卡通过输入 URL 下载特定 Kemono.cr 帖子的文件。适合下载单个帖子。<br>"
                 "  - <b>创作者下载器</b>：使用此选项卡下载整个创作者资料的内容，获取所有帖子及相关文件。<br>"
+                "  - <b>缩略图下载器</b>：即使全分辨率媒体服务器不可用，也可下载帖子或创作者缩略图（以及可选的帖子文本）。<br>"
                 "  - <b>设置</b>：配置应用程序的行为，例如保存目录、同时下载数量和界面偏好设置。<br>"
                 "  - <b>帮助</b>：您现在所在的位置！此选项卡提供全面的用户手册，指导您使用应用程序。<br><br>"
                 "<b>1.3 界面元素</b><br>"
@@ -2738,6 +2743,116 @@ class KDLanguage:
                 "- <b>日志记录</b>：控制台提供所有操作的详细日志，包括帖子检测、文件准备、下载进度和错误。这对于调试问题非常有用。<br>"
                 "- <b>批量处理</b>：启用“下载所有链接”时，应用程序按顺序处理创作者，逐一准备和下载每个创作者的文件，以有效管理资源。",
             },
+
+            "help_thumbnail_title": {
+                "english": "Using the Thumbnail Downloader Tab",
+                "japanese": "サムネイルダウンローダータブの使用",
+                "korean": "썸네일 다운로더 탭 사용",
+                "chinese-simplified": "使用缩略图下载器选项卡",
+            },
+            "help_thumbnail_text": {
+                "english": "The Thumbnail Downloader tab downloads preview images (and optional post text) for a post or an entire creator. Use it when full-resolution media servers are down or when you only need thumbnails.<br><br>"
+                "<b>How to use</b><br>"
+                "- Choose <b>Post</b> or <b>Creator</b> mode. Do not mix post and creator URLs in the same queue.<br>"
+                "- Add URLs to the queue (or import from a .txt file), then click <b>Detect Thumbnails</b>.<br>"
+                "- Filter, select the thumbnails you want, and click <b>Start Download</b>.<br>"
+                "- Optional: skip existing files, auto-rename by order, and save post descriptions as <code>desc_{post_id}.txt</code>.<br>"
+                "- Files are stored under <code>Downloads/Thumbnails/</code> using the folder strategy from Settings.",
+                "japanese": "サムネイルダウンローダータブは、投稿またはクリエイター全体のプレビュー画像（および任意の投稿テキスト）をダウンロードします。フル解像度のメディアサーバーが停止している場合や、サムネイルだけが必要な場合に使用します。<br><br>"
+                "<b>使い方</b><br>"
+                "- <b>投稿</b>または<b>クリエイター</b>モードを選びます。同じキューに投稿URLとクリエイターURLを混在させないでください。<br>"
+                "- URLをキューに追加（または.txtからインポート）し、<b>サムネイルを検出</b>をクリックします。<br>"
+                "- フィルタして必要なサムネイルを選び、<b>ダウンロード開始</b>をクリックします。<br>"
+                "- 任意：既存ファイルのスキップ、順序による自動リネーム、投稿説明を <code>desc_{post_id}.txt</code> として保存。<br>"
+                "- ファイルは設定のフォルダ戦略に従い <code>Downloads/Thumbnails/</code> に保存されます。",
+                "korean": "썸네일 다운로더 탭은 게시물 또는 전체 크리에이터의 미리보기 이미지(및 선택적 게시물 텍스트)를 다운로드합니다. 전체 해상도 미디어 서버가 다운되었거나 썸네일만 필요할 때 사용하세요.<br><br>"
+                "<b>사용 방법</b><br>"
+                "- <b>게시물</b> 또는 <b>크리에이터</b> 모드를 선택하세요. 같은 대기열에 게시물 URL과 크리에이터 URL을 섞지 마세요.<br>"
+                "- URL을 대기열에 추가(.txt에서 가져오기 가능)한 다음 <b>썸네일 감지</b>를 클릭하세요.<br>"
+                "- 필터링하고 원하는 썸네일을 선택한 뒤 <b>다운로드 시작</b>을 클릭하세요.<br>"
+                "- 선택 사항: 기존 파일 건너뛰기, 순서별 자동 이름 바꾸기, 게시물 설명을 <code>desc_{post_id}.txt</code>로 저장.<br>"
+                "- 파일은 설정의 폴더 전략에 따라 <code>Downloads/Thumbnails/</code>에 저장됩니다.",
+                "chinese-simplified": "缩略图下载器选项卡用于下载帖子或整个创作者的预览图（以及可选的帖子文本）。当全分辨率媒体服务器不可用，或您只需要缩略图时使用。<br><br>"
+                "<b>用法</b><br>"
+                "- 选择<b>帖子</b>或<b>创作者</b>模式。请勿在同一队列中混合帖子 URL 和创作者 URL。<br>"
+                "- 将 URL 加入队列（或从 .txt 导入），然后点击<b>检测缩略图</b>。<br>"
+                "- 过滤并选择所需缩略图，然后点击<b>开始下载</b>。<br>"
+                "- 可选：跳过已存在文件、按顺序自动重命名，并将帖子描述保存为 <code>desc_{post_id}.txt</code>。<br>"
+                "- 文件按设置中的文件夹策略保存在 <code>Downloads/Thumbnails/</code> 下。",
+            },
+            "help_favorites_title": {
+                "english": "Pawchive Favorites and Import",
+                "japanese": "Pawchive お気に入りとインポート",
+                "korean": "Pawchive 즐겨찾기 및 가져오기",
+                "chinese-simplified": "Pawchive 收藏与导入",
+            },
+            "help_favorites_text": {
+                "english": "The Creator Downloader tab includes a <b>Pawchive Favorites &amp; Import</b> group for batch-queuing artists.<br><br>"
+                "- <b>API key</b>: paste a Pawchive key from Account → Keys. The app sends it as <code>Cookie: session=&lt;key&gt;</code>.<br>"
+                "- <b>Fetch Favorites &amp; Queue</b>: download your favorites list and add new artists to the queue (already-queued artists are skipped).<br>"
+                "- <b>Sync</b>: same fetch, but also skip artists already processed in this session.<br>"
+                "- <b>Monitor recent posts feed</b>: queue unique creators from the first page of <code>/api/v1/posts</code>.<br>"
+                "- <b>Import Favorites JSON</b> / <b>Queue pasted JSON</b>: load a Kemono-family favorites export without live auth.<br>"
+                "- <b>Crawl from old site</b>: paginate <code>/api/v1/account/favorites?type=artist</code> on a previous domain (e.g. kemono.su) using a session cookie or API key.<br><br>"
+                "These actions only enqueue creator URLs. You still start the download from the Creator Downloader tab.",
+                "japanese": "クリエイターダウンローダータブの<b>Pawchive お気に入りとインポート</b>グループで、アーティストを一括キューに追加できます。<br><br>"
+                "- <b>APIキー</b>：アカウント → キーからPawchiveキーを貼り付けます。アプリは <code>Cookie: session=&lt;key&gt;</code> として送信します。<br>"
+                "- <b>お気に入りを取得してキューへ</b>：お気に入りリストを取得し、新しいアーティストをキューに追加します（既にキューにあるものはスキップ）。<br>"
+                "- <b>同期</b>：同じ取得ですが、このセッションですでに処理済みのアーティストもスキップします。<br>"
+                "- <b>最近の投稿フィードを監視</b>：<code>/api/v1/posts</code> の最初のページからユニークなクリエイターをキューに追加します。<br>"
+                "- <b>お気に入りJSONをインポート</b> / <b>貼り付けたJSONをキューへ</b>：ライブ認証なしでKemono系のお気に入りエクスポートを読み込みます。<br>"
+                "- <b>旧サイトからクロール</b>：セッションCookieまたはAPIキーを使い、以前のドメイン（例: kemono.su）で <code>/api/v1/account/favorites?type=artist</code> をページングします。<br><br>"
+                "これらの操作はクリエイターURLをキューに入れるだけです。ダウンロードはクリエイターダウンローダータブから開始してください。",
+                "korean": "크리에이터 다운로더 탭의 <b>Pawchive 즐겨찾기 및 가져오기</b> 그룹으로 작가를 일괄 대기열에 넣을 수 있습니다.<br><br>"
+                "- <b>API 키</b>: 계정 → 키에서 Pawchive 키를 붙여넣습니다. 앱은 <code>Cookie: session=&lt;key&gt;</code>로 전송합니다.<br>"
+                "- <b>즐겨찾기 가져오기 및 대기열 추가</b>: 즐겨찾기 목록을 가져와 새 작가를 대기열에 추가합니다(이미 대기열에 있는 항목은 건너뜁니다).<br>"
+                "- <b>동기화</b>: 동일한 가져오기이지만 이 세션에서 이미 처리된 작가도 건너뜁니다.<br>"
+                "- <b>최근 게시물 피드 모니터링</b>: <code>/api/v1/posts</code> 첫 페이지의 고유 크리에이터를 대기열에 추가합니다.<br>"
+                "- <b>즐겨찾기 JSON 가져오기</b> / <b>붙여넣은 JSON 대기열 추가</b>: 실시간 인증 없이 Kemono 계열 즐겨찾기 내보내기를 불러옵니다.<br>"
+                "- <b>이전 사이트에서 크롤링</b>: 세션 쿠키 또는 API 키로 이전 도메인(예: kemono.su)의 <code>/api/v1/account/favorites?type=artist</code>를 페이지네이션합니다.<br><br>"
+                "이 작업은 크리에이터 URL만 대기열에 넣습니다. 다운로드는 크리에이터 다운로더 탭에서 시작하세요.",
+                "chinese-simplified": "创作者下载器选项卡中的<b>Pawchive 收藏与导入</b>分组可用于批量将艺术家加入队列。<br><br>"
+                "- <b>API 密钥</b>：从账户 → 密钥粘贴 Pawchive 密钥。应用以 <code>Cookie: session=&lt;key&gt;</code> 发送。<br>"
+                "- <b>获取收藏并加入队列</b>：下载收藏列表并将新艺术家加入队列（已在队列中的会跳过）。<br>"
+                "- <b>同步</b>：同样获取，但还会跳过本会话中已处理的艺术家。<br>"
+                "- <b>监控最近帖子动态</b>：将 <code>/api/v1/posts</code> 第一页中的唯一创作者加入队列。<br>"
+                "- <b>导入收藏 JSON</b> / <b>将粘贴的 JSON 加入队列</b>：无需在线认证即可加载 Kemono 系列收藏导出。<br>"
+                "- <b>从旧站爬取</b>：使用会话 Cookie 或 API 密钥，分页请求旧域名（例如 kemono.su）的 <code>/api/v1/account/favorites?type=artist</code>。<br><br>"
+                "这些操作只将创作者 URL 加入队列。仍需在创作者下载器选项卡中开始下载。",
+            },
+            "help_fast_mode_title": {
+                "english": "Fast Mode",
+                "japanese": "高速モード",
+                "korean": "빠른 모드",
+                "chinese-simplified": "快速模式",
+            },
+            "help_fast_mode_text": {
+                "english": "Fast Mode (bolt icon) is available on the Post Downloader and Creator Downloader tabs when you want everything downloaded with as few clicks as possible.<br><br>"
+                "- All download categories are turned on and locked so nothing is missed.<br>"
+                "- A batch input area appears so you can paste many URLs at once (one per line).<br>"
+                "- Completed downloads are removed from the queue automatically.<br>"
+                "- On the Creator tab, Download auto-detects and queues every post for each creator in sequence.<br><br>"
+                "Turn Fast Mode off at any time to restore manual file/post selection.",
+                "japanese": "高速モード（稲妻アイコン）は、できるだけ少ない操作ですべてをダウンロードしたいときに、投稿ダウンローダーとクリエイターダウンローダータブで利用できます。<br><br>"
+                "- すべてのダウンロードカテゴリがONになりロックされるため、見逃しがありません。<br>"
+                "- 一括入力エリアが表示され、多数のURLを一度に貼り付けられます（1行に1つ）。<br>"
+                "- 完了したダウンロードはキューから自動的に削除されます。<br>"
+                "- クリエイタータブでは、ダウンロードが各クリエイターの全投稿を順に自動検出してキューに入れます。<br><br>"
+                "いつでもオフにして手動のファイル/投稿選択に戻せます。",
+                "korean": "빠른 모드(번개 아이콘)는 최소한의 클릭으로 모든 것을 다운로드하고 싶을 때 게시물 다운로더와 크리에이터 다운로더 탭에서 사용할 수 있습니다.<br><br>"
+                "- 모든 다운로드 카테고리가 켜지고 잠겨 아무것도 놓치지 않습니다.<br>"
+                "- 일괄 입력 영역이 나타나 여러 URL을 한 번에 붙여넣을 수 있습니다(한 줄에 하나).<br>"
+                "- 완료된 다운로드는 대기열에서 자동으로 제거됩니다.<br>"
+                "- 크리에이터 탭에서 다운로드는 각 크리에이터의 모든 게시물을 순차적으로 자동 감지하여 대기열에 넣습니다.<br><br>"
+                "언제든지 끄면 수동 파일/게시물 선택으로 돌아갑니다.",
+                "chinese-simplified": "快速模式（闪电图标）用于帖子下载器和创作者下载器选项卡，以便用尽可能少的点击下载全部内容。<br><br>"
+                "- 所有下载类别都会开启并锁定，避免遗漏。<br>"
+                "- 出现批量输入区域，可一次粘贴多个 URL（每行一个）。<br>"
+                "- 已完成的下载会自动从队列中移除。<br>"
+                "- 在创作者选项卡中，下载会按顺序自动检测每位创作者的全部帖子并加入队列。<br><br>"
+                "随时关闭即可恢复手动选择文件/帖子。",
+            },
+
             "help_settings_title": {
                 "english": "4. Using the Settings Tab",
                 "japanese": "4. 設定タブの使用",
@@ -3919,81 +4034,159 @@ class KDLanguage:
             },
             "favorites_no_api_key": {
                 "english": "No Pawchive API key entered.",
+                "japanese": "Pawchive APIキーが入力されていません。",
+                "korean": "Pawchive API 키가 입력되지 않았습니다.",
+                "chinese-simplified": "未输入 Pawchive API 密钥。",
             },
             "favorites_fetching": {
                 "english": "Fetching Pawchive favorites…",
+                "japanese": "Pawchive お気に入りを取得中…",
+                "korean": "Pawchive 즐겨찾기를 가져오는 중…",
+                "chinese-simplified": "正在获取 Pawchive 收藏…",
             },
             "favorites_syncing": {
                 "english": "Syncing Pawchive favorites…",
+                "japanese": "Pawchive お気に入りを同期中…",
+                "korean": "Pawchive 즐겨찾기를 동기화하는 중…",
+                "chinese-simplified": "正在同步 Pawchive 收藏…",
             },
             "favorites_fetch_in_progress": {
                 "english": "A favorites fetch is already in progress.",
+                "japanese": "お気に入りの取得はすでに進行中です。",
+                "korean": "즐겨찾기 가져오기가 이미 진행 중입니다.",
+                "chinese-simplified": "收藏获取已在进行中。",
             },
             "favorites_fetch_failed": {
                 "english": "Failed to fetch favorites: {0}",
+                "japanese": "お気に入りの取得に失敗しました: {0}",
+                "korean": "즐겨찾기 가져오기 실패: {0}",
+                "chinese-simplified": "获取收藏失败：{0}",
             },
             "favorites_queued_count": {
                 "english": "Queued {0} new artist(s) for batch download.",
+                "japanese": "一括ダウンロード用に {0} 人の新しいアーティストをキューに追加しました。",
+                "korean": "일괄 다운로드를 위해 새 작가 {0}명을 대기열에 추가했습니다.",
+                "chinese-simplified": "已将 {0} 位新艺术家加入批量下载队列。",
             },
             "favorites_skipped_count": {
                 "english": "Skipped {0} artist(s) (already queued or processed).",
+                "japanese": "{0} 人のアーティストをスキップしました（既にキュー済みまたは処理済み）。",
+                "korean": "작가 {0}명을 건너뛰었습니다(이미 대기열이거나 처리됨).",
+                "chinese-simplified": "已跳过 {0} 位艺术家（已在队列或已处理）。",
             },
             "favorites_sync_done": {
                 "english": "Sync complete: {0} new, {1} skipped.",
+                "japanese": "同期完了: {0} 件新規、{1} 件スキップ。",
+                "korean": "동기화 완료: 새로 {0}개, 건너뜀 {1}개.",
+                "chinese-simplified": "同步完成：新增 {0}，跳过 {1}。",
             },
             "recent_feed_fetched": {
                 "english": "Recent posts feed: queued {0} creator(s).",
+                "japanese": "最近の投稿フィード: {0} 人のクリエイターをキューに追加しました。",
+                "korean": "최근 게시물 피드: 크리에이터 {0}명을 대기열에 추가했습니다.",
+                "chinese-simplified": "最近帖子动态：已将 {0} 位创作者加入队列。",
             },
             "json_import_parsed": {
                 "english": "Parsed {0} artist(s) from favorites JSON.",
+                "japanese": "お気に入りJSONから {0} 人のアーティストを解析しました。",
+                "korean": "즐겨찾기 JSON에서 작가 {0}명을 파싱했습니다.",
+                "chinese-simplified": "已从收藏 JSON 解析 {0} 位艺术家。",
             },
             "json_import_invalid": {
                 "english": "Could not parse favorites JSON: {0}",
+                "japanese": "お気に入りJSONを解析できませんでした: {0}",
+                "korean": "즐겨찾기 JSON을 파싱할 수 없습니다: {0}",
+                "chinese-simplified": "无法解析收藏 JSON：{0}",
             },
             "json_import_empty": {
                 "english": "Paste or load a favorites JSON export first.",
+                "japanese": "先にお気に入りJSONエクスポートを貼り付けるか読み込んでください。",
+                "korean": "먼저 즐겨찾기 JSON 내보내기를 붙여넣거나 불러오세요.",
+                "chinese-simplified": "请先粘贴或加载收藏 JSON 导出。",
             },
             "old_site_no_domain": {
                 "english": "Enter the old site domain (e.g. kemono.su).",
+                "japanese": "旧サイトのドメインを入力してください（例: kemono.su）。",
+                "korean": "이전 사이트 도메인을 입력하세요(예: kemono.su).",
+                "chinese-simplified": "请输入旧站域名（例如 kemono.su）。",
             },
             "old_site_no_cred": {
                 "english": "Enter the old site session cookie or API key.",
+                "japanese": "旧サイトのセッションCookieまたはAPIキーを入力してください。",
+                "korean": "이전 사이트 세션 쿠키 또는 API 키를 입력하세요.",
+                "chinese-simplified": "请输入旧站会话 Cookie 或 API 密钥。",
             },
             "old_site_crawling": {
                 "english": "Crawling favorites from {0}…",
+                "japanese": "{0} からお気に入りをクロール中…",
+                "korean": "{0}에서 즐겨찾기를 크롤링하는 중…",
+                "chinese-simplified": "正在从 {0} 爬取收藏…",
             },
             "old_site_crawled": {
                 "english": "Crawled {0} artist(s) from {1}.",
+                "japanese": "{1} から {0} 人のアーティストをクロールしました。",
+                "korean": "{1}에서 작가 {0}명을 크롤링했습니다.",
+                "chinese-simplified": "已从 {1} 爬取 {0} 位艺术家。",
             },
             "old_site_crawl_failed": {
                 "english": "Failed to crawl old site favorites: {0}",
+                "japanese": "旧サイトのお気に入りクロールに失敗しました: {0}",
+                "korean": "이전 사이트 즐겨찾기 크롤링 실패: {0}",
+                "chinese-simplified": "爬取旧站收藏失败：{0}",
             },
             "old_site_crawl_in_progress": {
                 "english": "An old-site crawl is already in progress.",
+                "japanese": "旧サイトのクロールはすでに進行中です。",
+                "korean": "이전 사이트 크롤링이 이미 진행 중입니다.",
+                "chinese-simplified": "旧站爬取已在进行中。",
             },
             "post_already_processed": {
                 "english": "Post {0} already processed; skipping re-crawl.",
+                "japanese": "投稿 {0} はすでに処理済みです。再クロールをスキップします。",
+                "korean": "게시물 {0}은(는) 이미 처리되었습니다. 재크롤을 건너뜁니다.",
+                "chinese-simplified": "帖子 {0} 已处理；跳过重新爬取。",
             },
             "has_full_false_thumbnail": {
                 "english": "Post has_full=false; using thumbnail for {0}",
+                "japanese": "投稿 has_full=false。{0} にサムネイルを使用します",
+                "korean": "게시물 has_full=false; {0}에 썸네일을 사용합니다",
+                "chinese-simplified": "帖子 has_full=false；对 {0} 使用缩略图",
             },
             "file_404_requeue": {
                 "english": "Full-res file missing (404); pushing to back of queue: {0}",
+                "japanese": "フル解像度ファイルが見つかりません (404)。キューの末尾に戻します: {0}",
+                "korean": "전체 해상도 파일이 없습니다(404); 대기열 뒤로 보냅니다: {0}",
+                "chinese-simplified": "全分辨率文件缺失 (404)；重新排到队列末尾：{0}",
             },
             "file_network_requeue": {
                 "english": "Network error on full-res file; pushing to back of queue: {0}",
+                "japanese": "フル解像度ファイルでネットワークエラー。キューの末尾に戻します: {0}",
+                "korean": "전체 해상도 파일 네트워크 오류; 대기열 뒤로 보냅니다: {0}",
+                "chinese-simplified": "全分辨率文件网络错误；重新排到队列末尾：{0}",
             },
             "thumbnail_fallback": {
                 "english": "Retry failed; falling back to thumbnail for {0}",
+                "japanese": "再試行に失敗しました。{0} のサムネイルにフォールバックします",
+                "korean": "재시도 실패; {0}에 대해 썸네일로 대체합니다",
+                "chinese-simplified": "重试失败；回退到 {0} 的缩略图",
             },
             "thumbnail_fallback_ok": {
                 "english": "Downloaded degraded thumbnail for {0}",
+                "japanese": "{0} の劣化サムネイルをダウンロードしました",
+                "korean": "{0}의 저하된 썸네일을 다운로드했습니다",
+                "chinese-simplified": "已下载 {0} 的降级缩略图",
             },
             "thumbnail_fallback_failed": {
                 "english": "Thumbnail fallback failed for {0}: {1}",
+                "japanese": "{0} のサムネイルフォールバックに失敗しました: {1}",
+                "korean": "{0}의 썸네일 대체 실패: {1}",
+                "chinese-simplified": "{0} 的缩略图回退失败：{1}",
             },
             "requeueing_downloads": {
                 "english": "Retrying {0} failed full-res download(s)…",
+                "japanese": "失敗したフル解像度ダウンロード {0} 件を再試行中…",
+                "korean": "실패한 전체 해상도 다운로드 {0}개를 재시도하는 중…",
+                "chinese-simplified": "正在重试 {0} 个失败的全分辨率下载…",
             },
         }
 

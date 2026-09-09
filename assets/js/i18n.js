@@ -105,7 +105,7 @@ const translations = {
       // Usage
       usageTitle: "Usage",
       usageDescription:
-        'Upon launching, you\'ll see an introductory screen with a "Launch" button. Click it to enter the main interface, featuring four tabs: <strong>Post Downloader</strong>, <strong>Creator Downloader</strong>, <strong>Settings</strong>, and <strong>Help</strong>. The in-app Help tab contains a comprehensive user manual.',
+        'Upon launching, you\'ll see an introductory screen with a "Launch" button. Click it to enter the main interface, featuring six tabs: <strong>Post Downloader</strong>, <strong>Creator Downloader</strong>, <strong>Thumbnail Downloader</strong>, <strong>Settings</strong>, <strong>Help</strong>, and <strong>Browser Extension</strong>. The in-app Help tab contains a comprehensive user manual.',
       gettingStarted: "Getting Started",
       postDownloaderTab: "Post Downloader Tab",
       creatorDownloaderTab: "Creator Downloader Tab",
@@ -316,7 +316,7 @@ const translations = {
       // Usage
       usageTitle: "使用方法",
       usageDescription:
-        "起動すると、「起動」ボタンのある紹介画面が表示されます。クリックすると、<strong>投稿ダウンローダー</strong>、<strong>クリエイターダウンローダー</strong>、<strong>設定</strong>、<strong>ヘルプ</strong>の4つのタブを備えたメインインターフェースに入ります。アプリ内のヘルプタブには包括的なユーザーマニュアルが含まれています。",
+        "起動すると、「起動」ボタンのある紹介画面が表示されます。クリックすると、<strong>投稿ダウンローダー</strong>、<strong>クリエイターダウンローダー</strong>、<strong>サムネイルダウンローダー</strong>、<strong>設定</strong>、<strong>ヘルプ</strong>、<strong>ブラウザ拡張機能</strong>の6つのタブを備えたメインインターフェースに入ります。アプリ内のヘルプタブには包括的なユーザーマニュアルが含まれています。",
       gettingStarted: "はじめに",
       postDownloaderTab: "投稿ダウンローダータブ",
       creatorDownloaderTab: "クリエイターダウンローダータブ",
@@ -523,7 +523,7 @@ const translations = {
       // Usage
       usageTitle: "사용법",
       usageDescription:
-        '실행 시 "시작" 버튼이 있는 소개 화면이 표시됩니다. 클릭하면 <strong>게시물 다운로더</strong>, <strong>크리에이터 다운로더</strong>, <strong>설정</strong>, <strong>도움말</strong>의 네 가지 탭이 있는 메인 인터페이스로 들어갑니다. 앱 내 도움말 탭에는 포괄적인 사용자 매뉴얼이 포함되어 있습니다.',
+        '실행 시 "시작" 버튼이 있는 소개 화면이 표시됩니다. 클릭하면 <strong>게시물 다운로더</strong>, <strong>크리에이터 다운로더</strong>, <strong>썸네일 다운로더</strong>, <strong>설정</strong>, <strong>도움말</strong>, <strong>브라우저 확장</strong>의 여섯 가지 탭이 있는 메인 인터페이스로 들어갑니다. 앱 내 도움말 탭에는 포괄적인 사용자 매뉴얼이 포함되어 있습니다.',
       gettingStarted: "시작하기",
       postDownloaderTab: "게시물 다운로더 탭",
       creatorDownloaderTab: "크리에이터 다운로더 탭",
@@ -719,7 +719,7 @@ const translations = {
   
       // Usage
       usageTitle: "使用",
-      usageDescription: "启动后，您将看到一个介绍屏幕，带有 \"Launch\" 按钮。点击它进入主界面，包含四个选项卡：<strong>Post Downloader</strong>、<strong>Creator Downloader</strong>、<strong>Settings</strong> 和 <strong>Help</strong>。应用程序内 Help 选项卡包含全面的用户手册。",
+      usageDescription: "启动后，您将看到一个介绍屏幕，带有 \"Launch\" 按钮。点击它进入主界面，包含六个选项卡：<strong>Post Downloader</strong>、<strong>Creator Downloader</strong>、<strong>Thumbnail Downloader</strong>、<strong>Settings</strong>、<strong>Help</strong> 和 <strong>Browser Extension</strong>。应用程序内 Help 选项卡包含全面的用户手册。",
       gettingStarted: "入门",
       usageStep1: "应用程序会在指定的保存位置创建默认目录（<code>Downloads</code>、<code>Cache</code>、<code>Other Files</code>）。",
       usageStep2: "确保有活跃的互联网连接来访问 Kemono.cr 和 Coomer.st 内容。",

@@ -3,7 +3,7 @@
   "name": "Kemono Downloader Extension",
   "short_name": "KemonoDLE",
   "version": "1.2.0",
-  "description": "Download posts from Kemono and Coomer sites",
+  "description": "Download posts from Kemono, Coomer, and Pawchive sites",
   "author": "VoxDroid",
   "homepage_url": "https://github.com/VoxDroid/KemonoDownloader",
   "permissions": [
@@ -15,8 +15,10 @@
   "host_permissions": [
     "https://kemono.cr/*",
     "https://coomer.st/*",
+    "https://pawchive.pw/*",
     "https://*.kemono.cr/*",
     "https://*.coomer.st/*",
+    "https://*.pawchive.pw/*",
     "https://n4.coomer.st/*",
     "https://n4.kemono.cr/*"
   ],
@@ -25,8 +27,10 @@
       "matches": [
         "https://kemono.cr/*",
         "https://coomer.st/*",
+        "https://pawchive.pw/*",
         "https://*.kemono.cr/*",
-        "https://*.coomer.st/*"
+        "https://*.coomer.st/*",
+        "https://*.pawchive.pw/*"
       ],
       "js": ["jszip.min.js", "content.js"]
     }

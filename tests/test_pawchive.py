@@ -126,3 +126,88 @@ class TestGetPawchiveDomain:
     def test_returns_pawchive_domain(self):
         domain = pawchive.get_pawchive_domain()
         assert domain.startswith("pawchive.")
+
+
+class TestFetchFavoritesMocked:
+    def test_fetch_favorites_parses_list(self, monkeypatch):
+        class FakeResponse:
+            status_code = 200
+            content = b'[{"id": "77", "service": "fanbox", "name": "A"}]'
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return [{"id": "77", "service": "fanbox", "name": "A"}]
+
+        class FakeSession:
+            def get(self, url, headers=None, timeout=None):
+                assert "/api/v1/account/favorites" in url
+                assert headers and "Cookie" in headers
+                return FakeResponse()
+
+        entries = pawchive.fetch_favorites(
+            domain="pawchive.pw", api_key="abc", session=FakeSession()
+        )
+        assert entries == [("fanbox", "77", "A")]
+
+    def test_fetch_recent_posts_creators_dedupes(self, monkeypatch):
+        posts = [
+            {"service": "fanbox", "user": "1", "title": "First"},
+            {"service": "fanbox", "user": "1", "title": "Second"},
+            {"service": "patreon", "user": "2", "title": "Other"},
+        ]
+
+        class FakeResponse:
+            status_code = 200
+            content = b"[]"
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return posts
+
+        class FakeSession:
+            def get(self, url, headers=None, timeout=None):
+                assert "/api/v1/posts?o=0" in url
+                return FakeResponse()
+
+        entries = pawchive.fetch_recent_posts_creators(
+            domain="pawchive.pw", session=FakeSession()
+        )
+        assert entries == [
+            ("fanbox", "1", "First"),
+            ("patreon", "2", "Other"),
+        ]
+
+    def test_fetch_old_site_favorites_paginates_then_stops(self, monkeypatch):
+        pages = {
+            0: [{"id": "1", "service": "fanbox", "name": "A"}],
+            50: [],
+        }
+
+        class FakeSession:
+            def get(self, url, headers=None, timeout=None):
+                if "o=0" in url:
+                    payload = pages[0]
+                else:
+                    payload = pages[50]
+
+                class FakeResponse:
+                    status_code = 200
+                    content = b"[]"
+
+                    def raise_for_status(self):
+                        return None
+
+                    def json(self):
+                        return payload
+
+                return FakeResponse()
+
+        monkeypatch.setattr(pawchive.time, "sleep", lambda *_: None)
+        entries = pawchive.fetch_old_site_favorites(
+            "kemono.su", "session=abc", session=FakeSession(), page_size=50
+        )
+        assert entries == [("fanbox", "1", "A")]

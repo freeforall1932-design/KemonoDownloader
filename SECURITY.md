@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-KemonoDownloader is actively maintained, and security updates are provided for the latest release (currently v3.0.0 and above). We recommend using the most recent version to ensure you have the latest security fixes.
+KemonoDownloader is actively maintained, and security updates are provided for the latest release (currently v5.13.0 and above). We recommend using the most recent version to ensure you have the latest security fixes.
 
 | Version   | Supported          |
 |-----------|--------------------|
-| v3.0.0+   | ✅                 |
-| < v3.0.0  | ❌ (Please upgrade)|
+| v5.13.0+  | ✅                 |
+| < v5.13.0 | ❌ (Please upgrade)|
 
 ## Reporting a Vulnerability
 

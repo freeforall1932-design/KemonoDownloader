@@ -4,7 +4,7 @@
 > features, and "implemented but unsure" items. Companion docs:
 > [`SESSION_HANDOFF.md`](./SESSION_HANDOFF.md), [`IMPROVEMENT_LOG.md`](./IMPROVEMENT_LOG.md).
 >
-> Last updated: **2026-09-03**.
+> Last updated: **2026-09-09**.
 
 ---
 
@@ -29,11 +29,9 @@ logic, misaligned code, and breakage from earlier edits:
       the normal retry path (verified via stub, re-check after any edit).
       Confirm the creator downloader requeues onto the *same* live queue and the
       `_requeued_files` guard prevents a third full-res attempt.
-- [ ] **Post downloader second pass**: re-read the `_retry_pending` drain in
-      `run()`; the 30s `is_alive()` deadline may let `run()` return while a retry
-      thread is still running (potential "QThread destroyed while running").
-      Decide whether to raise the deadline or restructure (daemon threads +
-      `_destroyed` guard mitigate, but confirm).
+- [x] **Post downloader second pass**: `WORKER_JOIN_TIMEOUT_SECONDS` raised
+      from 30s to 180s in both downloaders (daemon threads + `_destroyed` guard
+      remain). Re-check in real Qt that retries still finish inside the window.
 - [ ] **`has_full` tri-state**: `has_full is False` → thumbnail; `True`/missing →
       full-res. Confirm this matches intent for posts where the field is absent
       (older responses). Flag if missing-field should also default to thumbnail.
@@ -47,8 +45,8 @@ logic, misaligned code, and breakage from earlier edits:
       `setup_ui`; confirm a settings-change (`settings_applied`) still leaves the
       Creator-tab API key field consistent (the key is edited in the Creator tab,
       not Settings; there is no Settings UI field for it).
-- [ ] **Translation completeness**: UI keys have ja/ko/zh; log-only keys are
-      english-only (fallback works). Decide whether to localize log keys.
+- [x] **Translation completeness**: Favorites / thumbnail-fallback log keys now
+      have ja/ko/zh. Older log-only keys remain english-only (fallback works).
 - [ ] **Signal wiring**: `FavoritesFetchThread`/`OldSiteFavoritesThread` connect
       `result`/`log`/`error`/`finished`; `finished` is auto-emitted by QThread.
       `_cleanup_*` uses `deleteLater()` and removes from `active_threads` — no
@@ -68,10 +66,13 @@ logic, misaligned code, and breakage from earlier edits:
       (`tests/test_creator_*.py`, `tests/test_post_downloader*.py`,
       `tests/test_kd_settings*.py`, etc.) has NOT been run against these changes.
       Must be run in a Qt-capable environment (CI / local dev) before merge.
-- [ ] **Network tests** for `pawchive.fetch_*` (mock-based) not written.
-- [ ] **CHANGELOG / version bump** not done.
-- [ ] **New log strings localization** (ja/ko/zh) not done.
-- [ ] **Docs** (these three) added but not yet committed.
+- [x] **Network tests** for `pawchive.fetch_*` (mock-based) added in
+      `tests/test_pawchive.py`.
+- [x] **CHANGELOG / version bump** — v5.13.0 (2026-09-09).
+- [x] **Favorites / thumbnail-fallback log strings** localized (ja/ko/zh).
+      Remaining older log-only keys still english-only.
+- [x] **Docs** for this cut: `CHANGELOG`, README/Help/i18n six-tab copy,
+      `docs/DEPLOYMENT_REVIEW.md`.
 
 ---
 

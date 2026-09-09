@@ -139,6 +139,45 @@ class HelpTab(QWidget):
         creator_downloader_text.setAlignment(Qt.AlignmentFlag.AlignJustify)
         self.content_layout.addWidget(creator_downloader_text)
 
+        # Section: Thumbnail Downloader
+        thumbnail_title = QLabel(f"<h2>{translate('help_thumbnail_title')}</h2>")
+        thumbnail_title.setFont(QFont(self._get_font_family(), 16, QFont.Weight.Bold))
+        thumbnail_title.setStyleSheet("color: white; padding: 10px 5px 5px 5px;")
+        self.content_layout.addWidget(thumbnail_title)
+
+        thumbnail_text = QLabel(translate("help_thumbnail_text"))
+        thumbnail_text.setFont(QFont(self._get_font_family(), 12))
+        thumbnail_text.setStyleSheet("color: #D0D0D0; padding: 5px;")
+        thumbnail_text.setWordWrap(True)
+        thumbnail_text.setAlignment(Qt.AlignmentFlag.AlignJustify)
+        self.content_layout.addWidget(thumbnail_text)
+
+        # Section: Pawchive Favorites
+        favorites_title = QLabel(f"<h2>{translate('help_favorites_title')}</h2>")
+        favorites_title.setFont(QFont(self._get_font_family(), 16, QFont.Weight.Bold))
+        favorites_title.setStyleSheet("color: white; padding: 10px 5px 5px 5px;")
+        self.content_layout.addWidget(favorites_title)
+
+        favorites_text = QLabel(translate("help_favorites_text"))
+        favorites_text.setFont(QFont(self._get_font_family(), 12))
+        favorites_text.setStyleSheet("color: #D0D0D0; padding: 5px;")
+        favorites_text.setWordWrap(True)
+        favorites_text.setAlignment(Qt.AlignmentFlag.AlignJustify)
+        self.content_layout.addWidget(favorites_text)
+
+        # Section: Fast Mode
+        fast_mode_title = QLabel(f"<h2>{translate('help_fast_mode_title')}</h2>")
+        fast_mode_title.setFont(QFont(self._get_font_family(), 16, QFont.Weight.Bold))
+        fast_mode_title.setStyleSheet("color: white; padding: 10px 5px 5px 5px;")
+        self.content_layout.addWidget(fast_mode_title)
+
+        fast_mode_text = QLabel(translate("help_fast_mode_text"))
+        fast_mode_text.setFont(QFont(self._get_font_family(), 12))
+        fast_mode_text.setStyleSheet("color: #D0D0D0; padding: 5px;")
+        fast_mode_text.setWordWrap(True)
+        fast_mode_text.setAlignment(Qt.AlignmentFlag.AlignJustify)
+        self.content_layout.addWidget(fast_mode_text)
+
         # Section: Using the Settings Tab
         settings_title = QLabel(f"<h2>{translate('help_settings_title')}</h2>")
         settings_title.setFont(QFont(self._get_font_family(), 16, QFont.Weight.Bold))

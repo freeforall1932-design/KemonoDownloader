@@ -46,7 +46,7 @@ def test_filter_thread_filters_and_emits():
 
 
 def test_validation_thread_success_and_failure(monkeypatch):
-    # Success path: domain string present in response.text
+    # Success path: HTTP 200 is enough (no domain-stem HTML gate)
     settings = SimpleNamespace(api_request_max_retries=1, settings_tab=None)
     t_success = ValidationThread("https://kemono.cr/service/user/1", settings)
     results = []

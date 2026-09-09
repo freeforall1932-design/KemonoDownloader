@@ -1756,6 +1756,32 @@ class TestPostDownloaderTab:
         url = "https://kemono.cr/kemono/user/123/post/456"
         assert post_tab.check_post_url_validity(url) is True
 
+    def test_check_post_url_validity_pawchive_without_kemono_html(
+        self, post_tab, monkeypatch
+    ):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><title>Pawchive archive</title></html>"
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_response
+
+        monkeypatch.setattr(
+            "kemonodownloader.post_downloader.get_session", lambda *a: mock_session
+        )
+        monkeypatch.setattr(post_tab, "append_log_to_console", MagicMock())
+
+        url = "https://pawchive.pw/fanbox/user/1/post/2"
+        assert post_tab.check_post_url_validity(url) is True
+
+    def test_check_post_url_validity_missing_post_segment(self, post_tab):
+        assert (
+            post_tab.check_post_url_validity(
+                "https://kemono.cr/patreon/user/12345678"
+            )
+            is False
+        )
+
     def test_download_thread_success(self, monkeypatch, tmp_path):
         import threading
 
@@ -3889,6 +3915,20 @@ class TestValidationThread:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Welcome to Kemono"
+        mock_session.get.return_value = mock_resp
+
+        results = []
+        val_thread.result.connect(results.append)
+        val_thread.run()
+        assert results[0] is True
+
+    def test_validation_success_without_site_name_in_html(
+        self, val_thread, mock_downloader_deps
+    ):
+        mock_session = mock_downloader_deps
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "<html><title>Archive</title></html>"
         mock_session.get.return_value = mock_resp
 
         results = []
