@@ -1,6 +1,6 @@
 # Kemono Downloader Release Notes
 
-## v5.13.0 (09 September 2026)
+## v5.14.0 (unreleased)
 **fix: Pawchive-safe URL validation, packaged domain list, and six-tab docs**
 
 - Post and Creator URL validation no longer require `"kemono"` / `"coomer"` (or the domain stem) in HTML. Known domains from `get_domains()` plus `/user/` + `/post/` (posts) or `/user/` (creators) and HTTP 200 are enough, so Pawchive pages validate.
@@ -8,8 +8,22 @@
 - Stop shipping `kemono_downloader-1.2.8.xpi`; ignore `*.xpi` / `*.crx`.
 - Help tab documents Thumbnail Downloader, Pawchive favorites/import, and Fast Mode.
 - Browser extension host permissions include Pawchive; `manifest.json` is a usable Chrome MV3 copy of `chrome_manifest.json`.
-- README / landing-page i18n: six tabs (Post, Creator, Thumbnail, Settings, Help, Browser Extension). `SECURITY.md` tracks v5.13.0+. Drop stdlib `asyncio` from `requirements.txt`. Pyproject description includes Pawchive.
+- README / landing-page i18n: six tabs (Post, Creator, Thumbnail, Settings, Help, Browser Extension). `SECURITY.md` tracks v5.14.0+. Drop stdlib `asyncio` from `requirements.txt`. Pyproject description includes Pawchive.
 - Raise worker `is_alive()` join timeout from 30s to 180s. Remove duplicate widget construction in Creator `add_list_item`.
+
+This fork previously labelled this work v5.13.0. Upstream shipped its own,
+unrelated v5.13.0 on 27 September 2026 (Pawchive rate limiting, below), so this
+cut is renumbered v5.14.0 and rebased onto upstream. See
+`docs/UPSTREAM_RECONCILIATION.md` and `docs/UPSTREAM_LANDSCAPE.md`.
+
+## v5.13.0 (27 September 2026)
+**fix: responsible Pawchive request pacing and improved resilience to HTTP 403 responses**
+
+- Add a Pawchive-specific identifiable user agent with a contact address instead of impersonating a browser.
+- Limit Pawchive file downloads to five active downloads across the Post and Creator Downloaders, while continuing to respect the user's lower simultaneous-download setting.
+- Pace new Pawchive file requests to at most one per second, including retry attempts, to reduce server overload and help prevent transient HTTP 403 responses.
+- Add a Settings info button explaining the Pawchive policy and update the ethical-use documentation.
+>>>>>>> 3ebae3d3373df04433d36d149ef6b1f516ed2edd
 
 ## v5.12.0 (01 August 2026)
 **feat: Thumbnail Downloader tab, Auto Rename by order, and Post Text description downloading**

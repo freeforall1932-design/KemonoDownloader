@@ -49,6 +49,11 @@ from kemonodownloader.domain_config import (
     get_domains,
     to_thumbnail_url,
 )
+from kemonodownloader.download_policy import (
+    acquire_pawchive_download,
+    get_request_headers,
+    release_pawchive_download,
+)
 from kemonodownloader.hash_db import HashDB
 
 # Resolve translations dynamically at call time so tests can monkeypatch
@@ -1609,7 +1614,11 @@ class DownloadThread(QThread):
             if not self.is_running:
                 return
             response = None
+            request_slot_acquired = False
             try:
+                if not acquire_pawchive_download(file_url, lambda: self.is_running):
+                    return
+                request_slot_acquired = True
                 # Serialize SSL connection establishment to prevent
                 # concurrent SSL access violations on Windows.
                 with self._ssl_lock:
@@ -1617,7 +1626,7 @@ class DownloadThread(QThread):
                         return
                     response = get_session(self.settings.settings_tab).get(
                         file_url,
-                        headers=get_headers(),
+                        headers=get_request_headers(get_headers(), file_url),
                         stream=True,
                         timeout=(30, 30),
                     )
@@ -1770,6 +1779,8 @@ class DownloadThread(QThread):
                         response.close()
                     except Exception:
                         pass
+                if request_slot_acquired:
+                    release_pawchive_download(file_url)
         # Fallback: Ensure the `file_completed` signal is emitted at least once
         # for this file. Some test setups replace signals with mocks and expect
         # an emission; emit a best-effort notification here without altering
