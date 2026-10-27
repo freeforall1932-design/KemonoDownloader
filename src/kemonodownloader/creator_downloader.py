@@ -39,15 +39,20 @@ from PyQt6.QtWidgets import (
 )
 from requests.adapters import HTTPAdapter  # type: ignore[import]
 
+from kemonodownloader import pawchive, pawchive_files
 from kemonodownloader.domain_config import (
     clean_file_url,
     get_domain_config,
     get_domains,
     to_thumbnail_url,
 )
+from kemonodownloader.download_policy import (
+    acquire_pawchive_download,
+    get_request_headers,
+    release_pawchive_download,
+)
 from kemonodownloader.hash_db import HashDB
 from kemonodownloader.kd_language import translate
-from kemonodownloader import pawchive
 
 # Worker threads may stream large files. A 30s is_alive() poll let QThread.run()
 # return while daemons were still alive (risking "QThread destroyed while running").
@@ -968,111 +973,137 @@ class FilePreparationThread(QThread):
             path_ext = os.path.splitext(file_path)[1].lower()
             return name_ext if name_ext else path_ext
 
-        # When the API reports ``has_full: false`` the full-resolution file
-        # is not available; go straight to the thumbnail to avoid a wasted
-        # (and guaranteed-to-404) full-res request.
-        use_thumbnail = post.get("has_full") is False
-
-        # Main file detection
-        if (
-            self.creator_main_check
-            and "file" in post
-            and post["file"]
-            and "path" in post["file"]
-        ):
-            file_path = post["file"]["path"]
-            file_name = post["file"].get("name", "")
-            file_ext = get_effective_extension(file_path, file_name)
-            if use_thumbnail:
-                file_url = to_thumbnail_url(file_path, domain_config)
-                self.log.emit(
-                    translate(
-                        "log_debug",
-                        translate("has_full_false_thumbnail", file_name),
-                    ),
-                    "INFO",
-                )
-            else:
-                file_url = clean_file_url(file_path, domain_config)
-                if "f=" not in file_url and file_name:
-                    file_url += f"?f={file_name}"
+        # Pawchive marks posts whose files are still being imported; say so once
+        # instead of letting the user wonder why every file failed.
+        if pawchive_files.is_pending_post(post):
             self.log.emit(
                 translate(
-                    "log_debug", translate("checking_main_file", file_name, file_ext)
+                    "log_info",
+                    translate("pawchive_pending_post", str(post.get("id") or "")),
                 ),
                 "INFO",
             )
-            if ".jpg" in allowed_extensions and file_ext in [".jpg", ".jpeg"]:
-                self.log.emit(
-                    translate("log_debug", translate("added_main_file", file_name)),
-                    "INFO",
+
+        def emit_log(message):
+            self.log.emit(message, "INFO")
+
+        def resolve_candidate(file_obj, label):
+            """Resolve one API file object to a URL, or None when unavailable.
+
+            Handles the whole Kemono-family file model (classic, signed
+            ``temp_url``, ``preview_only``, ``deferred``, post-level
+            ``has_full: false``) through ``pawchive_files.resolve_file``.
+            """
+            source = pawchive_files.resolve_file(file_obj, domain_config, post)
+            if not source.available:
+                if source.reason == pawchive_files.REASON_DEFERRED:
+                    emit_log(
+                        translate(
+                            "log_debug", translate("pawchive_deferred_file", label)
+                        )
+                    )
+                else:
+                    emit_log(
+                        translate(
+                            "log_debug", translate("pawchive_not_imported_file", label)
+                        )
+                    )
+                return None
+
+            # Pawchive file names are the content SHA-256: if that exact file was
+            # downloaded before, skip it without touching the network.
+            digest = pawchive_files.sha256_from_path(
+                file_obj.get("path") if isinstance(file_obj, dict) else None
+            )
+            if digest and getattr(self, "hash_db", None) is not None:
+                try:
+                    if self.hash_db.has_content_hash(digest):
+                        emit_log(
+                            translate(
+                                "log_debug",
+                                translate("already_downloaded_content_hash", label),
+                            )
+                        )
+                        return None
+                except Exception:
+                    pass
+
+            url = source.url
+            if source.append_filename and isinstance(file_obj, dict):
+                name = str(file_obj.get("name") or "")
+                if name and "f=" not in url:
+                    url += f"?f={name}"
+
+            if source.kind == pawchive_files.THUMBNAIL:
+                key = (
+                    "preview_only_thumbnail"
+                    if source.reason == pawchive_files.REASON_PREVIEW_ONLY
+                    else "has_full_false_thumbnail"
                 )
-                files_to_download.append((file_name, file_url))
-            elif file_ext in allowed_extensions:
-                self.log.emit(
-                    translate("log_debug", translate("added_main_file", file_name)),
-                    "INFO",
+                emit_log(translate("log_debug", translate(key, label)))
+            elif source.kind == pawchive_files.TEMP:
+                emit_log(
+                    translate("log_debug", translate("pawchive_signed_url", label))
+                )
+            return url
+
+        # Main file detection
+        if self.creator_main_check and post.get("file"):
+            file_obj = post["file"] if isinstance(post["file"], dict) else {}
+            file_path = str(file_obj.get("path") or "")
+            file_name = str(file_obj.get("name") or "")
+            file_ext = get_effective_extension(file_path, file_name)
+            emit_log(
+                translate(
+                    "log_debug", translate("checking_main_file", file_name, file_ext)
+                )
+            )
+            file_url = resolve_candidate(file_obj, file_name)
+            if file_url and (
+                file_ext in allowed_extensions
+                or (".jpg" in allowed_extensions and file_ext in [".jpg", ".jpeg"])
+            ):
+                emit_log(
+                    translate("log_debug", translate("added_main_file", file_name))
                 )
                 files_to_download.append((file_name, file_url))
 
         # Attachments detection
         if self.creator_attachments_check and "attachments" in post:
-            for attachment in post["attachments"]:
-                if isinstance(attachment, dict) and "path" in attachment:
-                    attachment_path = attachment["path"]
-                    attachment_name = attachment.get("name", "")
-                    attachment_ext = get_effective_extension(
-                        attachment_path, attachment_name
-                    )
-                    if use_thumbnail:
-                        attachment_url = to_thumbnail_url(
-                            attachment_path, domain_config
-                        )
-                        self.log.emit(
-                            translate(
-                                "log_debug",
-                                translate(
-                                    "has_full_false_thumbnail", attachment_name
-                                ),
-                            ),
-                            "INFO",
-                        )
-                    else:
-                        attachment_url = clean_file_url(
-                            attachment_path, domain_config
-                        )
-                        if "f=" not in attachment_url and attachment_name:
-                            attachment_url += f"?f={attachment_name}"
-                    self.log.emit(
+            for attachment in post.get("attachments") or []:
+                if not isinstance(attachment, dict):
+                    continue
+                attachment_path = str(attachment.get("path") or "")
+                attachment_name = str(attachment.get("name") or "")
+                if not attachment_path and not attachment.get("temp_url"):
+                    # Not imported yet (``deferred``) — report once, skip quietly.
+                    resolve_candidate(attachment, attachment_name)
+                    continue
+                attachment_ext = get_effective_extension(
+                    attachment_path, attachment_name
+                )
+                emit_log(
+                    translate(
+                        "log_debug",
                         translate(
-                            "log_debug",
-                            translate(
-                                "checking_attachment", attachment_name, attachment_ext
-                            ),
+                            "checking_attachment", attachment_name, attachment_ext
                         ),
-                        "INFO",
                     )
-                    if ".jpg" in allowed_extensions and attachment_ext in [
-                        ".jpg",
-                        ".jpeg",
-                    ]:
-                        self.log.emit(
-                            translate(
-                                "log_debug",
-                                translate("added_attachment", attachment_name),
-                            ),
-                            "INFO",
+                )
+                attachment_url = resolve_candidate(attachment, attachment_name)
+                if attachment_url and (
+                    attachment_ext in allowed_extensions
+                    or (
+                        ".jpg" in allowed_extensions
+                        and attachment_ext in [".jpg", ".jpeg"]
+                    )
+                ):
+                    emit_log(
+                        translate(
+                            "log_debug", translate("added_attachment", attachment_name)
                         )
-                        files_to_download.append((attachment_name, attachment_url))
-                    elif attachment_ext in allowed_extensions:
-                        self.log.emit(
-                            translate(
-                                "log_debug",
-                                translate("added_attachment", attachment_name),
-                            ),
-                            "INFO",
-                        )
-                        files_to_download.append((attachment_name, attachment_url))
+                    )
+                    files_to_download.append((attachment_name, attachment_url))
 
         # Content images detection
         if self.creator_content_check and "content" in post and post["content"]:
@@ -1859,57 +1890,63 @@ class CreatorDownloadThread(QThread):
             try:
                 headers = get_headers().copy()
                 headers["Referer"] = self.domain_config["referer"]
+                headers = get_request_headers(headers, file_url)
 
                 # Use requests instead of aiohttp for better proxy support
                 def download_with_requests():
                     session = get_session(self.settings.settings_tab)
-                    # Serialize SSL connection establishment to prevent
-                    # concurrent SSL access violations on Windows.
-                    with self._ssl_lock:
-                        if not self.is_running:
-                            raise Exception("Download cancelled before connection")
-                        response = session.get(
-                            file_url,
-                            headers=headers,
-                            stream=True,
-                            timeout=(30, 30),
-                        )
-                    # After headers are received each thread has its own
-                    # SSL connection and can stream data concurrently.
+                    if not acquire_pawchive_download(file_url, lambda: self.is_running):
+                        raise Exception("Download cancelled before rate-limit slot")
                     try:
-                        response.raise_for_status()
-                        header = response.headers.get("content-length")
+                        # Serialize SSL connection establishment to prevent
+                        # concurrent SSL access violations on Windows.
+                        with self._ssl_lock:
+                            if not self.is_running:
+                                raise Exception("Download cancelled before connection")
+                            response = session.get(
+                                file_url,
+                                headers=headers,
+                                stream=True,
+                                timeout=(30, 30),
+                            )
+                        # After headers are received each thread has its own
+                        # SSL connection and can stream data concurrently.
                         try:
-                            file_size = int(header) if header is not None else 0
-                        except Exception:
-                            file_size = 0
-                        downloaded_size = 0
+                            response.raise_for_status()
+                            header = response.headers.get("content-length")
+                            try:
+                                file_size = int(header) if header is not None else 0
+                            except Exception:
+                                file_size = 0
+                            downloaded_size = 0
 
-                        file_handle = open(full_path, "wb")
-                        try:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                if not self.is_running:
-                                    raise Exception("Download interrupted by user")
-                                if chunk:
-                                    file_handle.write(chunk)
-                                    downloaded_size += len(chunk)
-                                    if file_size > 0:
-                                        progress = int(
-                                            (downloaded_size / file_size) * 100
+                            file_handle = open(full_path, "wb")
+                            try:
+                                for chunk in response.iter_content(chunk_size=8192):
+                                    if not self.is_running:
+                                        raise Exception("Download interrupted by user")
+                                    if chunk:
+                                        file_handle.write(chunk)
+                                        downloaded_size += len(chunk)
+                                        if file_size > 0:
+                                            progress = int(
+                                                (downloaded_size / file_size) * 100
+                                            )
+                                        else:
+                                            progress = 0
+                                        self._safe_emit(
+                                            self.file_progress,
+                                            file_index,
+                                            min(progress, 100),
                                         )
-                                    else:
-                                        progress = 0
-                                    self._safe_emit(
-                                        self.file_progress,
-                                        file_index,
-                                        min(progress, 100),
-                                    )
-                        finally:
-                            file_handle.close()
+                            finally:
+                                file_handle.close()
 
-                        return file_size, downloaded_size
+                            return file_size, downloaded_size
+                        finally:
+                            response.close()
                     finally:
-                        response.close()
+                        release_pawchive_download(file_url)
 
                 # Run the download in a thread to avoid blocking
                 file_size, downloaded_size = await asyncio.to_thread(
@@ -1954,11 +1991,30 @@ class CreatorDownloadThread(QThread):
                         f"Size mismatch: downloaded {downloaded_size} bytes, expected {file_size} bytes"
                     )
 
-                with open(full_path, "rb") as f:
-                    file_hash = hashlib.md5(f.read()).hexdigest()
+                file_hash, content_sha256 = pawchive_files.compute_digests(full_path)
                 actual_file_size = os.path.getsize(full_path)
+                # Pawchive paths encode the content SHA-256; keeping it allows
+                # cross-session "already downloaded" checks and integrity
+                # verification without re-reading the file.
+                expected_sha256 = pawchive_files.expected_sha256_for_url(file_url)
+                if expected_sha256 and expected_sha256 != content_sha256:
+                    self._safe_emit(
+                        self.log,
+                        translate(
+                            "log_warning",
+                            translate(
+                                "content_hash_mismatch", os.path.basename(full_path)
+                            ),
+                        ),
+                        "WARNING",
+                    )
                 self.hash_db.store(
-                    url_hash, full_path, file_hash, file_url, actual_file_size
+                    url_hash,
+                    full_path,
+                    file_hash,
+                    file_url,
+                    actual_file_size,
+                    content_sha256=content_sha256,
                 )
                 self._safe_emit(
                     self.log,
@@ -2146,19 +2202,25 @@ class CreatorDownloadThread(QThread):
         try:
             headers = get_headers().copy()
             headers["Referer"] = self.domain_config["referer"]
+            # The fallback is still a Pawchive file request: honour the same
+            # identifiable user agent and the 5-slot / 1-per-second policy.
+            headers = get_request_headers(headers, thumb_url)
 
             def download_with_requests():
                 session = get_session(self.settings.settings_tab)
-                with self._ssl_lock:
-                    if not self.is_running:
-                        raise Exception("Download cancelled before connection")
-                    response = session.get(
-                        thumb_url,
-                        headers=headers,
-                        stream=True,
-                        timeout=(30, 30),
-                    )
+                if not acquire_pawchive_download(thumb_url, lambda: self.is_running):
+                    raise Exception("Download cancelled before rate-limit slot")
+                response = None
                 try:
+                    with self._ssl_lock:
+                        if not self.is_running:
+                            raise Exception("Download cancelled before connection")
+                        response = session.get(
+                            thumb_url,
+                            headers=headers,
+                            stream=True,
+                            timeout=(30, 30),
+                        )
                     response.raise_for_status()
                     with open(full_path, "wb") as fh:
                         for chunk in response.iter_content(chunk_size=8192):
@@ -2167,12 +2229,16 @@ class CreatorDownloadThread(QThread):
                             if chunk:
                                 fh.write(chunk)
                 finally:
-                    response.close()
+                    if response is not None:
+                        try:
+                            response.close()
+                        except Exception:
+                            pass
+                    release_pawchive_download(thumb_url)
 
             await asyncio.to_thread(download_with_requests)
 
-            with open(full_path, "rb") as f:
-                file_hash = hashlib.md5(f.read()).hexdigest()
+            file_hash, content_sha256 = pawchive_files.compute_digests(full_path)
             actual_size = os.path.getsize(full_path)
             # Store under the ORIGINAL full-res URL hash so later runs don't
             # waste a request re-trying a file we already know is degraded.
@@ -2182,12 +2248,11 @@ class CreatorDownloadThread(QThread):
                 file_hash,
                 file_url,
                 actual_size,
+                content_sha256=content_sha256,
             )
             self._safe_emit(
                 self.log,
-                translate(
-                    "log_info", translate("thumbnail_fallback_ok", file_url)
-                ),
+                translate("log_info", translate("thumbnail_fallback_ok", file_url)),
                 "INFO",
             )
             with self.completed_files_lock:
@@ -2717,6 +2782,7 @@ class CreatorDownloaderTab(QWidget):
                 self.hash_db = None
         # Pawchive favorites / import worker state
         self.favorites_fetch_thread = None
+        self.pawchive_login_thread = None
         self.old_site_thread = None
         os.makedirs(self.cache_dir, exist_ok=True)
         os.makedirs(self.other_files_dir, exist_ok=True)
@@ -2828,6 +2894,39 @@ class CreatorDownloaderTab(QWidget):
             "padding: 5px; border-radius: 5px; color: white; background: #2A3B5A;"
         )
         pawchive_fav_layout.addWidget(self.pawchive_api_key_input)
+
+        # Pawchive has no API-key endpoint - only the `session` cookie that the
+        # web login sets. Offer the real login form so nobody has to dig a cookie
+        # out of devtools, and keep the field above for pasting one manually.
+        pawchive_login_layout = QHBoxLayout()
+        self.pawchive_login_user_input = QLineEdit()
+        self.pawchive_login_user_input.setPlaceholderText(
+            translate("pawchive_login_username")
+        )
+        self.pawchive_login_user_input.setStyleSheet(
+            "padding: 5px; border-radius: 5px; color: white; background: #2A3B5A;"
+        )
+        pawchive_login_layout.addWidget(self.pawchive_login_user_input)
+
+        self.pawchive_login_password_input = QLineEdit()
+        self.pawchive_login_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pawchive_login_password_input.setPlaceholderText(
+            translate("pawchive_login_password")
+        )
+        self.pawchive_login_password_input.setStyleSheet(
+            "padding: 5px; border-radius: 5px; color: white; background: #2A3B5A;"
+        )
+        pawchive_login_layout.addWidget(self.pawchive_login_password_input)
+
+        self.pawchive_sign_in_btn = QPushButton(
+            qta.icon("fa5s.sign-in-alt", color="white"), ""
+        )
+        self.pawchive_sign_in_btn.clicked.connect(self.sign_in_pawchive)
+        self.pawchive_sign_in_btn.setStyleSheet(
+            "background: #4A5B7A; padding: 6px; border-radius: 5px;"
+        )
+        pawchive_login_layout.addWidget(self.pawchive_sign_in_btn)
+        pawchive_fav_layout.addLayout(pawchive_login_layout)
 
         pawchive_fav_btn_layout = QHBoxLayout()
         self.fav_fetch_btn = QPushButton(qta.icon("fa5s.download", color="white"), "")
@@ -3241,6 +3340,13 @@ class CreatorDownloaderTab(QWidget):
         self.pawchive_api_key_input.setPlaceholderText(
             translate("pawchive_api_key_placeholder")
         )
+        self.pawchive_login_user_input.setPlaceholderText(
+            translate("pawchive_login_username")
+        )
+        self.pawchive_login_password_input.setPlaceholderText(
+            translate("pawchive_login_password")
+        )
+        self.pawchive_sign_in_btn.setText(translate("pawchive_sign_in_btn"))
         self.fav_fetch_btn.setText(translate("fetch_favorites_btn"))
         self.fav_sync_btn.setText(translate("sync_favorites_btn"))
         self.recent_feed_check.setText(translate("monitor_recent_feed"))
@@ -3681,6 +3787,9 @@ class CreatorDownloaderTab(QWidget):
 
         # Pawchive favorites / import controls
         self.pawchive_api_key_input.setEnabled(not is_fetching)
+        self.pawchive_login_user_input.setEnabled(not is_fetching)
+        self.pawchive_login_password_input.setEnabled(not is_fetching)
+        self.pawchive_sign_in_btn.setEnabled(not is_fetching)
         self.fav_fetch_btn.setEnabled(not is_fetching)
         self.fav_sync_btn.setEnabled(not is_fetching)
         self.recent_feed_check.setEnabled(not is_fetching)
@@ -3739,6 +3848,9 @@ class CreatorDownloaderTab(QWidget):
 
         # Pawchive favorites / import controls
         self.pawchive_api_key_input.setEnabled(enabled)
+        self.pawchive_login_user_input.setEnabled(enabled)
+        self.pawchive_login_password_input.setEnabled(enabled)
+        self.pawchive_sign_in_btn.setEnabled(enabled)
         self.fav_fetch_btn.setEnabled(enabled)
         self.fav_sync_btn.setEnabled(enabled)
         self.recent_feed_check.setEnabled(enabled)
@@ -5280,6 +5392,52 @@ class CreatorDownloaderTab(QWidget):
             self.update_creator_queue_list()
         return added, skipped
 
+    def sign_in_pawchive(self):
+        """Sign in with username/password and store the returned session cookie."""
+        username = self.pawchive_login_user_input.text().strip()
+        password = self.pawchive_login_password_input.text()
+        if not username or not password:
+            self.append_log_to_console(
+                translate("log_error", translate("pawchive_sign_in_missing_fields")),
+                "ERROR",
+            )
+            return
+        if self.pawchive_login_thread is not None and (
+            self.pawchive_login_thread.isRunning()
+        ):
+            self.append_log_to_console(
+                translate("log_warning", translate("pawchive_sign_in_in_progress")),
+                "WARNING",
+            )
+            return
+        self.pawchive_login_thread = PawchiveLoginThread(
+            username=username,
+            password=password,
+            session=self._fav_session(),
+        )
+        self.pawchive_login_thread.result.connect(self._on_pawchive_signed_in)
+        self.pawchive_login_thread.error.connect(
+            lambda msg: self.append_log_to_console(translate("log_error", msg), "ERROR")
+        )
+        self.pawchive_login_thread.finished.connect(self._cleanup_pawchive_login_thread)
+        self.active_threads.append(self.pawchive_login_thread)
+        self.pawchive_login_thread.start()
+
+    def _on_pawchive_signed_in(self, token):
+        self.pawchive_api_key_input.setText(token or "")
+        self.pawchive_login_password_input.clear()
+        self._save_fav_settings()
+        self.append_log_to_console(
+            translate("log_info", translate("pawchive_sign_in_ok")), "INFO"
+        )
+
+    def _cleanup_pawchive_login_thread(self):
+        if self.pawchive_login_thread is not None:
+            if self.pawchive_login_thread in self.active_threads:
+                self.active_threads.remove(self.pawchive_login_thread)
+            self.pawchive_login_thread.deleteLater()
+            self.pawchive_login_thread = None
+
     def fetch_favorites_and_queue(self):
         """Fetch the authenticated Pawchive favorites list and queue the artists."""
         api_key = self.pawchive_api_key_input.text().strip()
@@ -5366,23 +5524,17 @@ class CreatorDownloaderTab(QWidget):
                 recent, skip_processed=sync_mode
             )
             self.append_log_to_console(
-                translate(
-                    "log_info", translate("recent_feed_fetched", recent_added)
-                ),
+                translate("log_info", translate("recent_feed_fetched", recent_added)),
                 "INFO",
             )
         if sync_mode:
             self.append_log_to_console(
-                translate(
-                    "log_info", translate("favorites_sync_done", added, skipped)
-                ),
+                translate("log_info", translate("favorites_sync_done", added, skipped)),
                 "INFO",
             )
         else:
             self.append_log_to_console(
-                translate(
-                    "log_info", translate("favorites_queued_count", added)
-                ),
+                translate("log_info", translate("favorites_queued_count", added)),
                 "INFO",
             )
             if skipped:
@@ -5414,9 +5566,7 @@ class CreatorDownloaderTab(QWidget):
             entries = pawchive.parse_json_file(file_path)
         except Exception as e:
             self.append_log_to_console(
-                translate(
-                    "log_error", translate("json_import_invalid", str(e))
-                ),
+                translate("log_error", translate("json_import_invalid", str(e))),
                 "ERROR",
             )
             return
@@ -5434,9 +5584,7 @@ class CreatorDownloaderTab(QWidget):
             entries = pawchive.parse_favorites_json_text(text)
         except Exception as e:
             self.append_log_to_console(
-                translate(
-                    "log_error", translate("json_import_invalid", str(e))
-                ),
+                translate("log_error", translate("json_import_invalid", str(e))),
                 "ERROR",
             )
             return
@@ -5455,9 +5603,7 @@ class CreatorDownloaderTab(QWidget):
         )
         if skipped:
             self.append_log_to_console(
-                translate(
-                    "log_info", translate("favorites_skipped_count", skipped)
-                ),
+                translate("log_info", translate("favorites_skipped_count", skipped)),
                 "INFO",
             )
 
@@ -5616,6 +5762,40 @@ class CreatorDownloaderTab(QWidget):
             error_msg = translate("file_read_error", str(e))
             self.append_log_to_console(translate("log_error", error_msg), "ERROR")
             QMessageBox.critical(self, translate("file_read_error_title"), error_msg)
+
+
+class PawchiveLoginThread(QThread):
+    """Sign in to Pawchive through the web form and return the session cookie."""
+
+    result = pyqtSignal(str)
+    log = pyqtSignal(str, str)
+    error = pyqtSignal(str)
+
+    def __init__(self, username, password, domain=None, session=None):
+        super().__init__()
+        self.username = username
+        self.password = password
+        self.domain = domain
+        self.session = session
+        self.is_running = True
+
+    def stop(self):
+        self.is_running = False
+
+    def run(self):
+        try:
+            token = pawchive.login_with_password(
+                self.username,
+                self.password,
+                domain=self.domain,
+                session=self.session,
+                is_running=lambda: self.is_running,
+            )
+            self.result.emit(token)
+        except pawchive.PawchiveLoginError as e:
+            self.error.emit(translate("pawchive_sign_in_failed", str(e)))
+        except Exception as e:
+            self.error.emit(translate("pawchive_sign_in_failed", str(e)))
 
 
 class FavoritesFetchThread(QThread):

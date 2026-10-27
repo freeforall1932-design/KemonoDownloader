@@ -1,10 +1,10 @@
 # Session Handoff — KemonoDownloader
 
-> Purpose: bring a fresh agent/model up to speed **before** creating the PR and
-> merge commit for the five-feature work done on branch
-> `arena/01a0651a-kemonodownloader`.
+> Purpose: bring a fresh agent/model up to speed on the current branch before
+> pushing / opening the PR.
 >
-> Last updated: **2026-09-03** (Asia/Jakarta). Companion docs:
+> Last updated: **2026-10-28** (Asia/Jakarta), v5.14.0 Pawchive-only cut.
+> Companion docs:
 > [`IMPROVEMENT_LOG.md`](./IMPROVEMENT_LOG.md) and [`WORKLIST.md`](./WORKLIST.md).
 
 ---
@@ -15,13 +15,16 @@
 |---|---|
 | Working dir | `/home/user/KemonoDownloader` |
 | Remote `origin` | `https://github.com/freeforall1932-design/KemonoDownloader.git` (a fork of `VoxDroid/KemonoDownloader`) |
-| Branch (**fixed for this session**) | `arena/01a0651a-kemonodownloader` |
-| Base commit | `3e2e954` "Add files via upload" (shallow clone, single commit) |
-| Push target | `git push origin arena/01a0651a-kemonodownloader` only. Never push/create other branches. |
+| Branch (**fixed for this session**) | `arena/5a274714-kemonodownloader` |
+| Merge commit | `98c474d` — base `463cf80`, parents fork HEAD `76869b6` + upstream `3ebae3d` (v5.13.0); only `CHANGELOG` conflicted |
+| Version | **5.14.0**, single-sourced in `src/kemonodownloader/__init__.py::__version__` |
+| Push target | `git push origin arena/5a274714-kemonodownloader` only. Never push/create other branches. |
 | PR flow | Use `gh` (auth already configured). Open PR from this branch, then create the merge commit. |
 
-The five features implemented (see §4) are **not yet committed** — everything is
-staged as uncommitted working-tree changes plus untracked files.
+The v5.14.0 Pawchive work (§4 plus the 2026-10-28 entry in `IMPROVEMENT_LOG.md`)
+is committed on the branch above. **Pawchive is the only supported site** — no
+`kemono.cr` / `coomer.st` / `cum.st` support and no cross-site mirroring
+(`UPSTREAM_LANDSCAPE.md` §11, `WORKLIST.md` §F).
 
 ## 2. Environment facts (recheck each session — `/tmp` does not persist)
 
@@ -53,7 +56,8 @@ cd /home/user/KemonoDownloader
 # 2. Pure-Python tests (all must pass; Qt tests are blocked here)
 /tmp/venv/bin/python -m pytest \
   tests/test_domain_config.py tests/test_pawchive.py \
-  tests/test_hash_db_processed.py tests/test_hash_db.py tests/test_language.py -q
+  tests/test_hash_db_processed.py tests/test_hash_db.py tests/test_language.py \
+  tests/test_download_policy.py tests/test_pawchive_files.py -q
 
 # 3. Translation-key sanity (all 37 new keys must resolve, incl. ja/ko/zh for UI)
 /tmp/venv/bin/python - <<'PY'

@@ -6,6 +6,96 @@
 
 ---
 
+## 2026-10-28 — v5.14.0: Pawchive file models, content-hash dedupe, sign-in
+
+Committed on `arena/5a274714-kemonodownloader` on top of the upstream merge
+(`98c474d`, base `463cf80`, parents fork HEAD `76869b6` + upstream
+`3ebae3d` = v5.13.0). Verification: `compileall` on every touched module, 177
+Qt-free tests pass (`test_pawchive`, `test_download_policy`,
+`test_pawchive_files`, `test_language`); the Qt-backed suites cannot run in this
+sandbox (no `libGL.so.1`).
+
+### Why
+
+Live API probes (2026-10-27/28) showed Pawchive attachments come in four shapes
+and our code only handled one:
+
+| shape | fields | what we did before |
+| --- | --- | --- |
+| classic | `node: 2` + `path` | worked |
+| signed | `temp_url` + `temp_expires` | ignored, built a dead `file.` URL |
+| `preview_only` | `path`, no full-res origin | fetched a 403/404 |
+| `deferred` | **no `path`** | `KeyError`, aborted the post |
+
+`preview_state: "pending"` posts (content not scraped yet) also got a full
+one-request-per-second download attempt per file, all of which fail.
+
+### Implemented
+
+1. **`pawchive_files.py` (new, Qt-free)** — `resolve_file(post | attachment)`
+   returns a `FileSource` with `kind` (`full` / `temp` / `thumbnail` /
+   `unavailable`) and a machine-readable `reason`, applying the precedence
+   *usable signed URL → `preview_only` → `has_full is False` → classic*.
+   Plus `resolve_thumbnail`, `sha256_from_path`, `compute_digests` (one read,
+   md5 + sha256), `verify_content_sha256`, `expected_sha256_for_url`,
+   `temp_url_is_usable`, `size_cap_bytes`, `human_size`, `is_pending_post`,
+   `is_scraped_post`.
+2. **Both `detect_files()` rewritten** to consume the resolver, log one clear
+   notice per pending/deferred post instead of per-file noise, and skip files
+   whose content digest is already in `hash_db` before touching the network.
+3. **`hash_db.py`** — nullable `content_sha256` column, in-place migration for
+   existing databases, index, sha256-aware lookups; `store()` accepts the
+   digest. Both downloaders compute md5+sha256 once and log
+   `content_hash_mismatch` when the API's path digest differs from the bytes.
+4. **Thumbnail fallbacks** now use the identifiable user agent and the
+   Pawchive download limiter, and always release their slot (`finally`);
+   the Creator fallback previously leaked a slot when the thumbnail 404'd.
+5. **`download_policy.py` rewritten** — dynamic `[host.]pawchive.<suffix>`
+   matching (the hardcoded `pawchive.pw` check disabled pacing as soon as the
+   domain rotated), `Retry-After` parsing (seconds + HTTP-date, 300 s ceiling),
+   metadata pacing, 5-slot limiter, and one deferred-request scheduler so a
+   `429` slows both downloads and metadata calls.
+6. **`pawchive.py`** — paced/retrying `_request_json`, `?type=artist`
+   favourites, envelope-tolerant `extract_posts`, `login_with_password` +
+   `extract_session_cookie` + `verify_session` (form login is the only option:
+   there is no key API and `/api/v1/account/login` 404s), and
+   `PawchiveLoginError`.
+7. **Sign-in UI** in the favourites group: username/password inputs, a worker
+   thread, cookie written into the (reworded) session-cookie field, and a
+   dedicated "already signing in" warning instead of borrowing the
+   favourites-fetch one.
+8. **Version single-sourcing** — `kemonodownloader.__version__` feeds
+   `app.CURRENT_VERSION` and the user agent, so they cannot drift.
+9. **Tests** — `tests/test_pawchive_files.py` (39 cases),
+   `tests/test_download_policy.py` (38 cases), and login/session/`401`
+   coverage appended to `tests/test_pawchive.py`.
+
+### Decisions kept for the record
+
+- **Pawchive only.** No `kemono.cr` / `coomer.st` / `cum.st` support and no
+  cross-site mirroring; `UPSTREAM_LANDSCAPE.md` §11 L1/L3 are marked rejected.
+- **The resolver is the single source of truth.** `detect_files()` in both
+  downloaders now shows the same behaviour; a future shape only needs a new
+  branch in `pawchive_files`, not two edits in two 4000-line modules.
+- **Warn, never re-download, on digest mismatch.** The file is already on disk
+  under a content-addressed name; re-fetching would burn the 1 rps budget for
+  bytes we cannot change.
+- **Over-matching a rotated suffix is deliberate.** `pawchive.<unknown>` is
+  treated as Pawchive even if it might be a lookalike, because the cost of
+  pacing an unrelated host (one second) is smaller than hammering the next
+  Pawchive domain unpaced.
+
+### Still open
+
+- `docs/DEPLOYMENT_REVIEW.md` and `docs/UPSTREAM_RECONCILIATION.md` still
+  describe v5.13.0 as the fork's cut; they are historical snapshots, kept as-is.
+- Qt-backed tests (`test_creator_downloader*`, `test_post_downloader*`, …) are
+  unverified in this sandbox; CI needs to run them.
+- Favourites pagination beyond the first page, and the "moxxy" successor site
+  rumour, remain unverified (see `WORKLIST.md`).
+
+---
+
 ## 2026-09-03 — Five-feature implementation (branch `arena/01a0651a-kemonodownloader`)
 
 All changes below are **implemented in working tree**, verified via
