@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from kemonodownloader import pawchive_files
 from kemonodownloader.creator_downloader import get_session
 from kemonodownloader.domain_config import (
     clean_file_url,
@@ -926,6 +927,7 @@ class FilePreparationThread(QThread):
         url,
         settings,
         max_concurrent=10,
+        hash_db=None,
     ):
         super().__init__()
         self.post_ids = post_ids
@@ -937,6 +939,9 @@ class FilePreparationThread(QThread):
         self.is_running = True
         self.url = url
         self.domain_config = get_domain_config(url)
+        # Used to skip files whose content SHA-256 is already on disk, before
+        # any request is made. Optional so the thread stays unit-testable.
+        self.hash_db = hash_db
 
     def stop(self):
         self.is_running = False
@@ -960,92 +965,124 @@ class FilePreparationThread(QThread):
             path_ext = os.path.splitext(file_path)[1].lower()
             return name_ext if name_ext else path_ext
 
-        # ``has_full: false`` means no full-resolution file is available;
-        # go straight to the thumbnail to avoid a guaranteed 404.
-        use_thumbnail = post.get("has_full") is False
+        if pawchive_files.is_pending_post(post):
+            self.log.emit(
+                translate(
+                    "log_info",
+                    translate("pawchive_pending_post", str(post.get("id") or "")),
+                ),
+                "INFO",
+            )
 
-        if "file" in post and post["file"] and "path" in post["file"]:
-            file_path = post["file"]["path"]
-            file_name = post["file"].get("name", "")
-            file_ext = get_effective_extension(file_path, file_name)
-            if use_thumbnail:
-                file_url = to_thumbnail_url(file_path, self.domain_config)
+        def resolve_candidate(file_obj, label):
+            """Resolve one API file object to a URL, or None when unavailable."""
+            source = pawchive_files.resolve_file(file_obj, self.domain_config, post)
+            if not source.available:
+                if source.reason == pawchive_files.REASON_DEFERRED:
+                    self.log.emit(
+                        translate(
+                            "log_debug", translate("pawchive_deferred_file", label)
+                        ),
+                        "INFO",
+                    )
+                else:
+                    self.log.emit(
+                        translate(
+                            "log_debug", translate("pawchive_not_imported_file", label)
+                        ),
+                        "INFO",
+                    )
+                return None
+
+            digest = pawchive_files.sha256_from_path(
+                file_obj.get("path") if isinstance(file_obj, dict) else None
+            )
+            hash_db = getattr(self, "hash_db", None)
+            if digest and hash_db is not None:
+                try:
+                    if hash_db.has_content_hash(digest):
+                        self.log.emit(
+                            translate(
+                                "log_debug",
+                                translate("already_downloaded_content_hash", label),
+                            ),
+                            "INFO",
+                        )
+                        return None
+                except Exception:
+                    pass
+
+            url = source.url
+            if source.append_filename and isinstance(file_obj, dict):
+                name = str(file_obj.get("name") or "")
+                if name and "f=" not in url:
+                    url += f"?f={name}"
+
+            if source.kind == pawchive_files.THUMBNAIL:
+                key = (
+                    "preview_only_thumbnail"
+                    if source.reason == pawchive_files.REASON_PREVIEW_ONLY
+                    else "has_full_false_thumbnail"
+                )
+                self.log.emit(translate("log_debug", translate(key, label)), "INFO")
+            elif source.kind == pawchive_files.TEMP:
                 self.log.emit(
-                    translate(
-                        "log_debug", translate("has_full_false_thumbnail", file_name)
-                    ),
+                    translate("log_debug", translate("pawchive_signed_url", label)),
                     "INFO",
                 )
-            else:
-                file_url = clean_file_url(file_path, self.domain_config)
-                if "f=" not in file_url and file_name:
-                    file_url += f"?f={file_name}"
+            return url
+
+        if post.get("file"):
+            file_obj = post["file"] if isinstance(post["file"], dict) else {}
+            file_path = str(file_obj.get("path") or "")
+            file_name = str(file_obj.get("name") or "")
+            file_ext = get_effective_extension(file_path, file_name)
             self.log.emit(
                 translate("log_debug", f"Checking main file: {file_name} ({file_ext})"),
                 "INFO",
             )
-            if ".jpg" in allowed_extensions and file_ext in [".jpg", ".jpeg"]:
-                self.log.emit(
-                    translate("log_debug", f"Added main file: {file_name}"), "INFO"
-                )
-                files_to_download.append((file_name, file_url))
-            elif file_ext in allowed_extensions:
+            file_url = resolve_candidate(file_obj, file_name)
+            if file_url and (
+                file_ext in allowed_extensions
+                or (".jpg" in allowed_extensions and file_ext in [".jpg", ".jpeg"])
+            ):
                 self.log.emit(
                     translate("log_debug", f"Added main file: {file_name}"), "INFO"
                 )
                 files_to_download.append((file_name, file_url))
 
         if "attachments" in post:
-            for attachment in post["attachments"]:
-                if isinstance(attachment, dict) and "path" in attachment:
-                    attachment_path = attachment["path"]
-                    attachment_name = attachment.get("name", "")
-                    attachment_ext = get_effective_extension(
-                        attachment_path, attachment_name
+            for attachment in post.get("attachments") or []:
+                if not isinstance(attachment, dict):
+                    continue
+                attachment_path = str(attachment.get("path") or "")
+                attachment_name = str(attachment.get("name") or "")
+                if not attachment_path and not attachment.get("temp_url"):
+                    resolve_candidate(attachment, attachment_name)
+                    continue
+                attachment_ext = get_effective_extension(
+                    attachment_path, attachment_name
+                )
+                self.log.emit(
+                    translate(
+                        "log_debug",
+                        f"Checking attachment: {attachment_name} ({attachment_ext})",
+                    ),
+                    "INFO",
+                )
+                attachment_url = resolve_candidate(attachment, attachment_name)
+                if attachment_url and (
+                    attachment_ext in allowed_extensions
+                    or (
+                        ".jpg" in allowed_extensions
+                        and attachment_ext in [".jpg", ".jpeg"]
                     )
-                    if use_thumbnail:
-                        attachment_url = to_thumbnail_url(
-                            attachment_path, self.domain_config
-                        )
-                        self.log.emit(
-                            translate(
-                                "log_debug",
-                                translate("has_full_false_thumbnail", attachment_name),
-                            ),
-                            "INFO",
-                        )
-                    else:
-                        attachment_url = clean_file_url(
-                            attachment_path, self.domain_config
-                        )
-                        if "f=" not in attachment_url and attachment_name:
-                            attachment_url += f"?f={attachment_name}"
+                ):
                     self.log.emit(
-                        translate(
-                            "log_debug",
-                            f"Checking attachment: {attachment_name} ({attachment_ext})",
-                        ),
+                        translate("log_debug", f"Added attachment: {attachment_name}"),
                         "INFO",
                     )
-                    if ".jpg" in allowed_extensions and attachment_ext in [
-                        ".jpg",
-                        ".jpeg",
-                    ]:
-                        self.log.emit(
-                            translate(
-                                "log_debug", f"Added attachment: {attachment_name}"
-                            ),
-                            "INFO",
-                        )
-                        files_to_download.append((attachment_name, attachment_url))
-                    elif attachment_ext in allowed_extensions:
-                        self.log.emit(
-                            translate(
-                                "log_debug", f"Added attachment: {attachment_name}"
-                            ),
-                            "INFO",
-                        )
-                        files_to_download.append((attachment_name, attachment_url))
+                    files_to_download.append((attachment_name, attachment_url))
 
         if "content" in post and post["content"]:
             soup = BeautifulSoup(post["content"], "html.parser")
@@ -1704,11 +1741,26 @@ class DownloadThread(QThread):
                         f"Size mismatch: downloaded {downloaded_size} bytes, expected {file_size} bytes"
                     )
 
-                with open(full_path, "rb") as f:
-                    file_hash = hashlib.md5(f.read()).hexdigest()
+                file_hash, content_sha256 = pawchive_files.compute_digests(full_path)
                 actual_file_size = os.path.getsize(full_path)
+                expected_sha256 = pawchive_files.expected_sha256_for_url(file_url)
+                if expected_sha256 and expected_sha256 != content_sha256:
+                    self.log.emit(
+                        translate(
+                            "log_warning",
+                            translate(
+                                "content_hash_mismatch", os.path.basename(full_path)
+                            ),
+                        ),
+                        "WARNING",
+                    )
                 self.hash_db.store(
-                    url_hash, full_path, file_hash, file_url, actual_file_size
+                    url_hash,
+                    full_path,
+                    file_hash,
+                    file_url,
+                    actual_file_size,
+                    content_sha256=content_sha256,
                 )
                 self.log.emit(
                     translate(
@@ -1861,9 +1913,13 @@ class DownloadThread(QThread):
         thumb_url = to_thumbnail_url(file_url, self.domain_config)
         if not thumb_url or thumb_url == file_url:
             return False
+        headers = get_headers().copy()
+        headers["Referer"] = self.domain_config["referer"]
+        # Keep the fallback inside the Pawchive policy (identifiable UA + cap).
+        headers = get_request_headers(headers, thumb_url)
+        if not acquire_pawchive_download(thumb_url, lambda: self.is_running):
+            return False
         try:
-            headers = get_headers().copy()
-            headers["Referer"] = self.domain_config["referer"]
             with self._ssl_lock:
                 if not self.is_running:
                     return False
@@ -1881,8 +1937,7 @@ class DownloadThread(QThread):
             finally:
                 response.close()
 
-            with open(full_path, "rb") as f:
-                file_hash = hashlib.md5(f.read()).hexdigest()
+            file_hash, content_sha256 = pawchive_files.compute_digests(full_path)
             actual_size = os.path.getsize(full_path)
             # Store under the ORIGINAL full-res URL hash so later runs don't
             # waste a request re-trying a file we already know is degraded.
@@ -1892,6 +1947,7 @@ class DownloadThread(QThread):
                 file_hash,
                 file_url,
                 actual_size,
+                content_sha256=content_sha256,
             )
             self.log.emit(
                 translate("log_info", translate("thumbnail_fallback_ok", file_url)),
@@ -1911,6 +1967,8 @@ class DownloadThread(QThread):
                 "ERROR",
             )
             return False
+        finally:
+            release_pawchive_download(thumb_url)
 
     def check_post_completion(self, file_url):
         post_id = self.files_to_posts_map.get(file_url)
@@ -3364,6 +3422,7 @@ class PostDownloaderTab(QWidget):
             urls[0] if urls else "",
             self._create_thread_settings(),
             max_concurrent=5,
+            hash_db=self.hash_db,
         )
         self.file_preparation_thread.url = urls[0] if urls else None
         self.file_preparation_thread.progress.connect(self.update_background_progress)

@@ -4,16 +4,21 @@
 > features, and "implemented but unsure" items. Companion docs:
 > [`SESSION_HANDOFF.md`](./SESSION_HANDOFF.md), [`IMPROVEMENT_LOG.md`](./IMPROVEMENT_LOG.md).
 >
-> Last updated: **2026-09-09**.
+> Last updated: **2026-10-28** (v5.14.0 Pawchive-only cut).
 
 ---
 
 ## A. Immediate next steps (blockers for PR)
 
-- [ ] Re-run the verification commands in `SESSION_HANDOFF.md` §3.
-- [ ] Resolve/record the "implemented but unsure" items in §D.
-- [ ] Commit on `arena/01a0651a-kemonodownloader`, push, `gh pr create`, review,
-      then create the merge commit.
+- [x] Re-run the verification commands in `SESSION_HANDOFF.md` §3 (Qt-free part).
+- [ ] Run the **Qt-backed** suites somewhere with `libGL.so.1` (CI or a desktop
+      dev box). The new sign-in widgets, the resolver-driven `detect_files()`,
+      and the slot-safe thumbnail fallback are all exercised only by
+      `compileall` in this sandbox.
+- [ ] Confirm the sign-in flow against a real Pawchive account (needs a human):
+      `login_with_password` posts to `/account/login` and reads the `session`
+      cookie. If the site adds a captcha, the flow needs a friendly error.
+- [ ] Open the PR from `arena/5a274714-kemonodownloader` (push only that branch).
 
 ---
 
@@ -73,16 +78,30 @@ logic, misaligned code, and breakage from earlier edits:
       Remaining older log-only keys still english-only.
 - [x] **Docs** for this cut: `CHANGELOG`, README/Help/i18n six-tab copy,
       `docs/DEPLOYMENT_REVIEW.md`.
+- [x] **v5.14.0 Pawchive P0 work** (2026-10-28): `pawchive_files` resolver,
+      content-hash dedupe (`hash_db.content_sha256`), sign-in, dynamic Pawchive
+      host matching + `Retry-After`, single-read md5+sha256. See
+      `docs/IMPROVEMENT_LOG.md` (2026-10-28 entry).
+- [ ] **Favourites pagination** — `fetch_favorites` reads one page. If a user has
+      hundreds of favourites, later pages are silently missing. Needs the same
+      `o=` loop the old-site crawl uses.
+- [ ] **`docs/DEPLOYMENT_REVIEW.md` / `UPSTREAM_RECONCILIATION.md`** still
+      describe v5.13.0 as the current cut. Kept as historical snapshots; refresh
+      only if the PR needs them current.
+- [ ] **`Temp`/`deferred` retry** — deferred attachments are kept in the queue
+      with an "not imported yet" notice but are never re-tried in-session. A
+      "re-check deferred files" action would close that loop.
 
 ---
 
 ## D. "Implemented but unsure" (verify against real systems)
 
-- [ ] **Pawchive favorites auth** — `Cookie: session=<key>` is taken from the
-      `NiTiSon/Pawchive` client, but was **not verified against live Pawchive with
-      a real key** (sandbox egress blocked; anonymous call returns `{}`). Verify
-      with a real key that `GET /api/v1/account/favorites` returns the artist
-      list (shape: list or `{...}`? `parse_artist_entries` tolerates several).
+- [x] **Pawchive favorites auth shape** — anonymous `GET
+      /api/v1/account/favorites` answers `401 {}`; with a session cookie it
+      answers the artist list. `parse_artist_entries` tolerates both. The
+      **login form** itself is still unverified against a real account (§A).
+- [ ] **`?type=artist` vs default** — Pawchive accepts `type=artist` (verified
+      shape-wise from `pawchive-tools`); confirm it does not change paging.
 - [ ] **Old-site crawl** — `?type=artist&o={offset}` + page size 50 assumed from
       Kemono API conventions; **not verified against a live old site**. Confirm
       the credential format (full `connect.sid=` cookie vs bare key) and the
@@ -117,3 +136,10 @@ logic, misaligned code, and breakage from earlier edits:
 
 Revisions, comments, tags, announcements, fancards, `search_hash`, `app_version`,
 flagging, and site-wide batch via `/creators`.
+
+**Pawchive is the only supported site** (ruled 2026-10-28). Not to be added,
+even on request: `kemono.cr` / `coomer.st` support, `cum.st` (that is OnlyHaven,
+a different project), any multi-site registry, and any cross-site
+"Kemono → Pawchive" switching or mirroring. Kemono-family payload shapes
+(`node`, `path`, `{count, posts}`) stay supported only because Pawchive's own API
+uses them.

@@ -1,8 +1,50 @@
 # Kemono Downloader Release Notes
 
 ## v5.14.0 (unreleased)
-**fix: Pawchive-safe URL validation, packaged domain list, and six-tab docs**
+**feat: Pawchive-only file-model resolution, content-hash dedupe, and account sign-in**
 
+Pawchive is the only supported site. Everything below is Pawchive-specific; the
+fork intentionally does not add `kemono.cr` / `coomer.st` / `cum.st` handling or
+cross-site mirroring (see `docs/UPSTREAM_LANDSCAPE.md` §11 for why those lanes
+were rejected).
+
+- Add `pawchive_files`, a Qt-free file-model resolver shared by both downloaders.
+  It understands every attachment shape the live API returns: classic
+  (`node` + `path` → `file.pawchive.<suffix>/data{path}?f={name}`), signed
+  `temp_url` links, `preview_only` attachments that only ever have a thumbnail,
+  and `deferred` attachments that have **no** `path` at all. Previously a
+  `deferred` post raised `KeyError` mid-download and aborted the queue.
+- Skip attachments that cannot be fetched yet, with a one-per-post notice
+  instead of a wall of errors, and detect `preview_state: "pending"` posts so
+  they are retried once rather than hammered.
+- Reject expired `temp_url` links (`temp_expires`) before spending a request on
+  them and fall back to the thumbnail, which is what Pawchive serves anyway.
+- Content-addressed de-duplication: Pawchive filenames are the file's SHA-256,
+  so `hash_db` gains a nullable `content_sha256` column (with an in-place
+  `ALTER TABLE` migration for existing databases and an index). Downloads are
+  now skipped before any network call when that digest is already known, and a
+  mismatch between the API's claimed digest and the downloaded bytes is logged
+  as a warning rather than silently ignored.
+- Compute MD5 and SHA-256 in a single read (`compute_digests`) instead of
+  hashing the file twice, and persist both in every store path, including the
+  full-resolution → thumbnail fallbacks.
+- Add account sign-in: the favourites group takes a username and password,
+  logs in through the site's web form on a worker thread, and stores the
+  returned `session` cookie in the (renamed) credential field. Pawchive has no
+  API keys, and `/api/v1/account/login` does not exist, so form login is the
+  only supported path.
+- Route thumbnail fallbacks through the same identifiable user agent, download
+  limiter, and slot release path as full downloads; the Creator fallback used to
+  leak a slot when the thumbnail request failed.
+- Recognise Pawchive hosts dynamically in `download_policy` (any
+  `[host.]pawchive.<suffix>`), so the next domain rotation does not silently
+  disable pacing. Honour `Retry-After` (seconds and HTTP-date forms) with a
+  five-minute ceiling, and pace metadata calls (favourites, recent feed,
+  old-site crawl) on the same one-request-per-second budget as file downloads.
+- `__version__` now lives in `kemonodownloader.__init__` and is the single
+  source for the app title and the user agent, so they can no longer drift.
+- Add `tests/test_download_policy.py`, `tests/test_pawchive_files.py`, and
+  login/session coverage in `tests/test_pawchive.py` (77 new cases).
 - Post and Creator URL validation no longer require `"kemono"` / `"coomer"` (or the domain stem) in HTML. Known domains from `get_domains()` plus `/user/` + `/post/` (posts) or `/user/` (creators) and HTTP 200 are enough, so Pawchive pages validate.
 - Bundle `assets/config/domain` at `src/kemonodownloader/resources/config/domain` so Briefcase packages (which only include `src/kemonodownloader`) still have a local domain list when offline.
 - Stop shipping `kemono_downloader-1.2.8.xpi`; ignore `*.xpi` / `*.crx`.
@@ -23,7 +65,6 @@ cut is renumbered v5.14.0 and rebased onto upstream. See
 - Limit Pawchive file downloads to five active downloads across the Post and Creator Downloaders, while continuing to respect the user's lower simultaneous-download setting.
 - Pace new Pawchive file requests to at most one per second, including retry attempts, to reduce server overload and help prevent transient HTTP 403 responses.
 - Add a Settings info button explaining the Pawchive policy and update the ethical-use documentation.
->>>>>>> 3ebae3d3373df04433d36d149ef6b1f516ed2edd
 
 ## v5.12.0 (01 August 2026)
 **feat: Thumbnail Downloader tab, Auto Rename by order, and Post Text description downloading**

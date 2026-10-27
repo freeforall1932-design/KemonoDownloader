@@ -2783,7 +2783,6 @@ class KDLanguage:
                 "- <b>日志记录</b>：控制台提供所有操作的详细日志，包括帖子检测、文件准备、下载进度和错误。这对于调试问题非常有用。<br>"
                 "- <b>批量处理</b>：启用“下载所有链接”时，应用程序按顺序处理创作者，逐一准备和下载每个创作者的文件，以有效管理资源。",
             },
-
             "help_thumbnail_title": {
                 "english": "Using the Thumbnail Downloader Tab",
                 "japanese": "サムネイルダウンローダータブの使用",
@@ -2892,7 +2891,6 @@ class KDLanguage:
                 "- 在创作者选项卡中，下载会按顺序自动检测每位创作者的全部帖子并加入队列。<br><br>"
                 "随时关闭即可恢复手动选择文件/帖子。",
             },
-
             "help_settings_title": {
                 "english": "4. Using the Settings Tab",
                 "japanese": "4. 設定タブの使用",
@@ -4007,10 +4005,52 @@ class KDLanguage:
                 "chinese-simplified": "Pawchive 收藏与导入",
             },
             "pawchive_api_key_placeholder": {
-                "english": "Pawchive API key (Account → Keys)",
-                "japanese": "Pawchive APIキー（アカウント → キー）",
-                "korean": "Pawchive API 키 (계정 → 키)",
-                "chinese-simplified": "Pawchive API 密钥（账户 → 密钥）",
+                "english": "Pawchive session cookie (cookie value of 'session', or sign in below)",
+                "japanese": "Pawchive セッション Cookie（'session' の値、または下でログイン）",
+                "korean": "Pawchive 세션 쿠키 ('session' 값 또는 아래에서 로그인)",
+                "chinese-simplified": "Pawchive 会话 Cookie（'session' 的值，或在下方登录）",
+            },
+            "pawchive_login_username": {
+                "english": "Username",
+                "japanese": "ユーザー名",
+                "korean": "사용자 이름",
+                "chinese-simplified": "用户名",
+            },
+            "pawchive_login_password": {
+                "english": "Password",
+                "japanese": "パスワード",
+                "korean": "비밀번호",
+                "chinese-simplified": "密码",
+            },
+            "pawchive_sign_in_btn": {
+                "english": "Sign in",
+                "japanese": "ログイン",
+                "korean": "로그인",
+                "chinese-simplified": "登录",
+            },
+            "pawchive_sign_in_ok": {
+                "english": "Signed in — session cookie stored.",
+                "japanese": "ログインしました — セッション Cookie を保存しました。",
+                "korean": "로그인되었습니다 — 세션 쿠키를 저장했습니다.",
+                "chinese-simplified": "已登录 — 已保存会话 Cookie。",
+            },
+            "pawchive_sign_in_failed": {
+                "english": "Sign-in failed: {0}",
+                "japanese": "ログインに失敗しました: {0}",
+                "korean": "로그인 실패: {0}",
+                "chinese-simplified": "登录失败：{0}",
+            },
+            "pawchive_sign_in_missing_fields": {
+                "english": "Enter both username and password to sign in.",
+                "japanese": "ログインするにはユーザー名とパスワードの両方を入力してください。",
+                "korean": "로그인하려면 사용자 이름과 비밀번호를 모두 입력하세요.",
+                "chinese-simplified": "请输入用户名和密码以登录。",
+            },
+            "pawchive_sign_in_in_progress": {
+                "english": "Already signing in to Pawchive. Wait for it to finish.",
+                "japanese": "Pawchive にサインイン中です。完了するまでお待ちください。",
+                "korean": "이미 Pawchive에 로그인하는 중입니다. 완료될 때까지 기다려 주세요.",
+                "chinese-simplified": "正在登录 Pawchive，请等待完成。",
             },
             "fetch_favorites_btn": {
                 "english": "Fetch Favorites & Queue",
@@ -4185,6 +4225,48 @@ class KDLanguage:
                 "japanese": "投稿 {0} はすでに処理済みです。再クロールをスキップします。",
                 "korean": "게시물 {0}은(는) 이미 처리되었습니다. 재크롤을 건너뜁니다.",
                 "chinese-simplified": "帖子 {0} 已处理；跳过重新爬取。",
+            },
+            "preview_only_thumbnail": {
+                "english": "Only a preview exists for {0}; downloading the thumbnail",
+                "japanese": "{0} はプレビューのみです。サムネイルをダウンロードします",
+                "korean": "{0}은(는) 미리보기만 있습니다. 썸네일을 다운로드합니다",
+                "chinese-simplified": "{0} 仅有预览；正在下载缩略图",
+            },
+            "pawchive_signed_url": {
+                "english": "Using Pawchive's signed temporary link for {0}",
+                "japanese": "{0} に Pawchive の署名付き一時リンクを使用します",
+                "korean": "{0}에 Pawchive 서명된 임시 링크를 사용합니다",
+                "chinese-simplified": "对 {0} 使用 Pawchive 签名临时链接",
+            },
+            "pawchive_deferred_file": {
+                "english": "{0} is deferred: Pawchive has not imported it yet",
+                "japanese": "{0} は保留中です: Pawchive にまだ取り込まれていません",
+                "korean": "{0}은(는) 보류 중입니다: Pawchive에 아직 가져오지 않았습니다",
+                "chinese-simplified": "{0} 已延迟：Pawchive 尚未导入",
+            },
+            "pawchive_not_imported_file": {
+                "english": "{0} has no file path yet (not imported)",
+                "japanese": "{0} にはまだファイルパスがありません（未取り込み）",
+                "korean": "{0}에 아직 파일 경로가 없습니다 (가져오지 않음)",
+                "chinese-simplified": "{0} 尚无文件路径（未导入）",
+            },
+            "pawchive_pending_post": {
+                "english": "Post {0} is preview_state=pending: files may not be imported yet, trying each once",
+                "japanese": "投稿 {0} は preview_state=pending です。ファイル未取り込みの可能性があるため各1回のみ試行します",
+                "korean": "게시물 {0}은(는) preview_state=pending입니다. 파일을 아직 가져오지 않았을 수 있어 각각 한 번만 시도합니다",
+                "chinese-simplified": "帖子 {0} 为 preview_state=pending：文件可能尚未导入，将只尝试一次",
+            },
+            "already_downloaded_content_hash": {
+                "english": "Skipping {0}: identical file content already downloaded",
+                "japanese": "{0} をスキップします: 同じ内容のファイルは既にダウンロード済みです",
+                "korean": "{0} 건너뛰기: 동일한 내용의 파일을 이미 다운로드했습니다",
+                "chinese-simplified": "跳过 {0}：相同内容的文件已下载",
+            },
+            "content_hash_mismatch": {
+                "english": "Checksum mismatch for {0}: the downloaded bytes differ from the API's SHA-256",
+                "japanese": "{0} のチェックサムが一致しません: ダウンロードした内容が API の SHA-256 と異なります",
+                "korean": "{0}의 체크섬이 일치하지 않습니다: 다운로드한 바이트가 API의 SHA-256과 다릅니다",
+                "chinese-simplified": "{0} 校验和不匹配：下载内容与 API 的 SHA-256 不同",
             },
             "has_full_false_thumbnail": {
                 "english": "Post has_full=false; using thumbnail for {0}",

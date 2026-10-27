@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from kemonodownloader import __version__
 from kemonodownloader.creator_downloader import CreatorDownloaderTab
 from kemonodownloader.kd_extension import ExtensionTab
 from kemonodownloader.kd_help import HelpTab
@@ -33,7 +34,7 @@ from kemonodownloader.post_downloader import PostDownloaderTab
 
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
-CURRENT_VERSION = "5.13.0"
+CURRENT_VERSION = __version__  # single source: kemonodownloader.__init__
 GITHUB_REPO = "VoxDroid/KemonoDownloader"
 
 # Available Google Fonts bundled with the app

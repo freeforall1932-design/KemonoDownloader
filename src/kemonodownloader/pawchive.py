@@ -18,16 +18,24 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import requests
 
 from kemonodownloader.domain_config import get_domains
-
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+from kemonodownloader.download_policy import (
+    IDENTIFIABLE_USER_AGENT,
+    is_pawchive_url,
+    pace_pawchive_request,
+    retry_after_seconds,
 )
+from kemonodownloader.pawchive_files import size_cap_bytes
+
+# Use the same honest, contactable user agent as the download paths. Impersonating
+# a browser is what upstream v5.13.0 removed on purpose (it is also a common cause
+# of the 403s Pawchive hands out). Kept as a module constant so callers/tests that
+# imported it keep working.
+DEFAULT_USER_AGENT = IDENTIFIABLE_USER_AGENT
 
 # Artist entry: (service, id, name)
 ArtistEntry = Tuple[str, str, str]
@@ -147,43 +155,94 @@ def _request_json(
     referer: Optional[str] = None,
     extra_headers: Optional[Dict[str, str]] = None,
     timeout: int = 30,
+    is_running: Optional[Callable[[], bool]] = None,
+    max_attempts: int = 3,
 ) -> object:
+    """GET *url* as JSON, paced and rate-limit aware.
+
+    Every Pawchive metadata call goes through here, so the one-request-per-second
+    budget applies to favorites lists, the recent feed and the old-site crawl
+    alike. ``429``/``503`` responses are retried after the server's
+    ``Retry-After`` (capped in :mod:`download_policy`). Only idempotent GETs are
+    retried, which is all this module issues.
+    """
     headers = _browser_headers(referer)
     if extra_headers:
         headers.update(extra_headers)
-    response = session.get(url, headers=headers, timeout=timeout)
-    response.raise_for_status()
-    if not response.content.strip():
-        return None
-    return response.json()
+
+    attempts = max(1, int(max_attempts))
+    for attempt in range(1, attempts + 1):
+        if is_running is not None and not is_running():
+            raise requests.RequestException("Cancelled before request")
+        if not pace_pawchive_request(url, is_running or (lambda: True)):
+            raise requests.RequestException("Cancelled while pacing request")
+
+        response = session.get(url, headers=headers, timeout=timeout)
+        if response.status_code in (429, 503) and attempt < attempts:
+            delay = retry_after_seconds(getattr(response, "headers", None))
+            if delay is None:
+                delay = float(attempt)  # mild, capped exponential substitute
+            time.sleep(min(delay, 30.0))
+            continue
+
+        response.raise_for_status()
+        if not response.content.strip():
+            return None
+        return response.json()
+    raise requests.RequestException(f"Exhausted retries for {url}")
 
 
 def fetch_favorites(
     domain: Optional[str] = None,
     api_key: Optional[str] = None,
     session: Optional[requests.Session] = None,
+    fav_type: str = "artist",
+    is_running: Optional[Callable[[], bool]] = None,
 ) -> List[ArtistEntry]:
     """Fetch the authenticated Pawchive favorites list.
 
-    Returns a list of ``(service, id, name)`` entries.  When no API key is
-    supplied the request is anonymous (returns an empty list).
+    Returns a list of ``(service, id, name)`` entries.  When no credential is
+    supplied the request is anonymous and the API answers ``401`` with ``{}``
+    (surfaced as an empty list).
+
+    ``fav_type`` selects the API's ``type`` query parameter: ``"artist"`` (the
+    default, creator favourites — what this downloader queues) or ``"post"``.
     """
     domain = domain or get_pawchive_domain()
-    url = f"https://{domain}/api/v1/account/favorites"
+    url = f"https://{domain}/api/v1/account/favorites?type={fav_type}"
     headers = auth_cookie_header(api_key) if api_key else None
     payload = _request_json(
         _resolve_session(session),
         url,
         referer=f"https://{domain}/",
         extra_headers=headers,
+        is_running=is_running,
     )
     return parse_artist_entries(payload)
+
+
+def extract_posts(payload: object) -> List[dict]:
+    """Return the post list from an API payload, tolerating both shapes.
+
+    Pawchive answers ``/api/v1/posts`` with a bare array, while ``kemono.cr``
+    wraps it as ``{"count": …, "true_count": …, "posts": [...]}``. Some mirrors
+    also use ``{"data": [...]}``.
+    """
+    if isinstance(payload, list):
+        return [post for post in payload if isinstance(post, dict)]
+    if isinstance(payload, dict):
+        for key in ("posts", "data", "results"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [post for post in value if isinstance(post, dict)]
+    return []
 
 
 def fetch_recent_posts_creators(
     domain: Optional[str] = None,
     session: Optional[requests.Session] = None,
     page_size: int = 50,
+    is_running: Optional[Callable[[], bool]] = None,
 ) -> List[ArtistEntry]:
     """Fetch one page of the recent-posts feed and return the unique creators.
 
@@ -193,9 +252,12 @@ def fetch_recent_posts_creators(
     domain = domain or get_pawchive_domain()
     url = f"https://{domain}/api/v1/posts?o=0"
     payload = _request_json(
-        _resolve_session(session), url, referer=f"https://{domain}/"
+        _resolve_session(session),
+        url,
+        referer=f"https://{domain}/",
+        is_running=is_running,
     )
-    posts = payload if isinstance(payload, list) else []
+    posts = extract_posts(payload)
     seen = set()
     entries: List[ArtistEntry] = []
     for post in posts:
@@ -263,3 +325,122 @@ def parse_json_file(path: str) -> List[ArtistEntry]:
     """Read and parse a favorites JSON export file."""
     with open(path, "r", encoding="utf-8") as fh:
         return parse_favorites_json_text(fh.read())
+
+
+# ---------------------------------------------------------------------------
+# Session cookie helpers
+# ---------------------------------------------------------------------------
+#
+# Pawchive has exactly one auth scheme: the ``session`` cookie that the website
+# sets after a form login. There is no API-key endpoint and no
+# ``/api/v1/account/login`` route, so asking the user to paste a cookie works but
+# is unfriendly; ``login_with_password`` drives the real web form instead.
+
+
+class PawchiveLoginError(RuntimeError):
+    """Raised when a Pawchive/Kemono-family form login does not yield a session."""
+
+
+def extract_session_cookie(session: object) -> str:
+    """Return the ``session`` cookie value from a requests session (or "")."""
+    cookies = getattr(session, "cookies", None)
+    if cookies is None:
+        return ""
+    try:
+        value = cookies.get("session")
+    except Exception:
+        return ""
+    return str(value or "")
+
+
+def login_with_password(
+    username: str,
+    password: str,
+    domain: Optional[str] = None,
+    session: Optional[requests.Session] = None,
+    timeout: int = 30,
+    is_running: Optional[Callable[[], bool]] = None,
+) -> str:
+    """Log in through the site's web form and return the ``session`` cookie.
+
+    The cookie is what the API wants as ``Cookie: session=<value>``. Raises
+    :class:`PawchiveLoginError` when the site answers without setting a session
+    cookie (bad credentials, captcha, outage).
+    """
+    username = (username or "").strip()
+    password = password or ""
+    if not username or not password:
+        raise PawchiveLoginError("Username and password are required")
+
+    domain = domain or get_pawchive_domain()
+    login_url = f"https://{domain}/account/login"
+    requests_session = _resolve_session(session)
+
+    if is_running is not None and not is_running():
+        raise PawchiveLoginError("Cancelled before login")
+    if not pace_pawchive_request(login_url, is_running or (lambda: True)):
+        raise PawchiveLoginError("Cancelled while pacing login")
+
+    headers = _browser_headers(f"https://{domain}/")
+    headers["Content-Type"] = "application/x-www-form-urlencoded"
+    try:
+        response = requests_session.post(
+            login_url,
+            data={"username": username, "password": password},
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=True,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network
+        raise PawchiveLoginError(f"Login request failed: {exc}") from exc
+
+    token = extract_session_cookie(requests_session)
+    if not token:
+        raise PawchiveLoginError(
+            f"Login did not return a session cookie (HTTP {response.status_code})"
+        )
+    return token
+
+
+def verify_session(
+    credential: str,
+    domain: Optional[str] = None,
+    session: Optional[requests.Session] = None,
+    timeout: int = 30,
+) -> bool:
+    """Return whether *credential* is accepted by ``/account/favorites``.
+
+    The endpoint answers ``401`` (with an empty ``{}`` body) for anonymous or
+    expired sessions, and a list/object with artists when the cookie is valid.
+    """
+    credential = (credential or "").strip()
+    if not credential:
+        return False
+    domain = domain or get_pawchive_domain()
+    url = f"https://{domain}/api/v1/account/favorites?type=artist"
+    try:
+        response = _resolve_session(session).get(
+            url,
+            headers={
+                **_browser_headers(f"https://{domain}/"),
+                **auth_cookie_header(credential),
+            },
+            timeout=timeout,
+        )
+    except requests.RequestException:
+        return False
+    if getattr(response, "status_code", 0) == 401:
+        return False
+    if getattr(response, "status_code", 0) >= 400:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    # ``{}`` is what an unauthenticated call returns even when it is not a 401.
+    return bool(payload)
+
+
+def file_size_cap_for_favorites(favorites: object) -> int:
+    """Backwards-friendly alias for :func:`pawchive_files.size_cap_bytes`."""
+    return size_cap_bytes(favorites)

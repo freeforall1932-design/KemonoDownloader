@@ -59,7 +59,8 @@ class HashDB:
                         file_path  TEXT NOT NULL,
                         file_hash  TEXT NOT NULL,
                         url        TEXT NOT NULL,
-                        file_size  INTEGER NOT NULL DEFAULT 0
+                        file_size  INTEGER NOT NULL DEFAULT 0,
+                        content_sha256 TEXT
                     )
                     """
                 )
@@ -106,6 +107,31 @@ class HashDB:
                         "ADD COLUMN file_size INTEGER NOT NULL DEFAULT 0"
                     )
                     conn.commit()
+                # SHA-256 of the file bytes. Pawchive/Kemono file paths encode
+                # this hash, so storing it enables "already downloaded" checks
+                # (and integrity verification) without re-reading a library.
+                if "content_sha256" not in columns:
+                    conn.execute(
+                        "ALTER TABLE file_hashes ADD COLUMN content_sha256 TEXT"
+                    )
+                    conn.commit()
+                # Indexes must be created *after* the migrations above, otherwise
+                # opening a pre-content_sha256 database fails on the missing
+                # column before it can be added.
+                #
+                # Content-hash index: Pawchive file paths encode the SHA-256 of
+                # the file, so we can skip an already-downloaded file without
+                # reading it. file_hash is MD5 for legacy rows, hence a lookup
+                # simply finds nothing for those.
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_file_hashes_file_hash "
+                    "ON file_hashes(file_hash)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_file_hashes_content_sha256 "
+                    "ON file_hashes(content_sha256)"
+                )
+                conn.commit()
             finally:
                 conn.close()
 
@@ -163,7 +189,7 @@ class HashDB:
             conn = self._get_connection()
             try:
                 row = conn.execute(
-                    "SELECT file_path, file_hash, url, file_size "
+                    "SELECT file_path, file_hash, url, file_size, content_sha256 "
                     "FROM file_hashes WHERE url_hash = ?",
                     (url_hash,),
                 ).fetchone()
@@ -173,6 +199,7 @@ class HashDB:
                         "file_hash": row["file_hash"],
                         "url": row["url"],
                         "file_size": row["file_size"],
+                        "content_sha256": row["content_sha256"],
                     }
                 return None
             finally:
@@ -185,18 +212,30 @@ class HashDB:
         file_hash: str,
         url: str,
         file_size: int = 0,
+        content_sha256: Optional[str] = None,
     ) -> None:
-        """Insert or replace an entry."""
+        """Insert or replace an entry.
+
+        ``content_sha256`` is optional so every existing caller keeps working;
+        when supplied it enables :meth:`has_content_hash` lookups.
+        """
         with self._lock:
             conn = self._get_connection()
             try:
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO file_hashes
-                    (url_hash, file_path, file_hash, url, file_size)
-                    VALUES (?, ?, ?, ?, ?)
+                    (url_hash, file_path, file_hash, url, file_size, content_sha256)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (url_hash, file_path, file_hash, url, file_size),
+                    (
+                        url_hash,
+                        file_path,
+                        file_hash,
+                        url,
+                        file_size,
+                        (content_sha256 or "").lower() or None,
+                    ),
                 )
                 conn.commit()
             finally:
@@ -205,6 +244,45 @@ class HashDB:
     def contains(self, url_hash: str) -> bool:
         """Check whether *url_hash* already exists."""
         return self.lookup(url_hash) is not None
+
+    def has_content_hash(self, content_hash: str) -> bool:
+        """Return whether a file with *content_hash* was already downloaded.
+
+        Used for Pawchive-style paths whose final segment is the file's SHA-256:
+        a match means the exact bytes already exist somewhere in the download
+        tree, so the file can be skipped without hashing anything locally.
+        """
+        content_hash = (content_hash or "").strip().lower()
+        if not content_hash:
+            return False
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM file_hashes "
+                    "WHERE lower(file_hash) = ? OR lower(content_sha256) = ? LIMIT 1",
+                    (content_hash, content_hash),
+                ).fetchone()
+                return row is not None
+            finally:
+                conn.close()
+
+    def path_for_content_hash(self, content_hash: str) -> Optional[str]:
+        """Return the stored file path for *content_hash*, or ``None``."""
+        content_hash = (content_hash or "").strip().lower()
+        if not content_hash:
+            return None
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT file_path FROM file_hashes "
+                    "WHERE lower(file_hash) = ? OR lower(content_sha256) = ? LIMIT 1",
+                    (content_hash, content_hash),
+                ).fetchone()
+                return row["file_path"] if row else None
+            finally:
+                conn.close()
 
     def count(self) -> int:
         """Return total number of stored hashes."""
@@ -321,7 +399,13 @@ class HashDB:
                     (key, service, creator_id, url, timestamp)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (self._creator_key(service, creator_id), service, creator_id, url, time.time()),
+                    (
+                        self._creator_key(service, creator_id),
+                        service,
+                        creator_id,
+                        url,
+                        time.time(),
+                    ),
                 )
                 conn.commit()
             finally:

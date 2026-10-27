@@ -295,10 +295,18 @@ Also keep the upstream v5.13.0 policy as the floor: identifiable UA, ≤1 reques
 
 ## 11. Open decisions
 
-| # | Decision | Recommendation |
+> **Scope ruling (2026-10-28): Pawchive only.** The project supports Pawchive and
+> nothing else. No `kemono.cr`, no `coomer.st`, no `cum.st`, no multi-site
+> registry, no cross-site mirroring. L1 and L3 below are therefore **rejected**,
+> not deferred, and L2 is moot — there is no "other site" to switch from.
+> Kemono-family logic stays only where it is needed to *read* Pawchive's own API,
+> whose payload shape is inherited from the kemono codebase (`node`, `path`,
+> `{count, posts}` envelopes). Nothing that reaches a non-Pawchive host ships.
+
+| # | Decision | Status |
 |---|---|---|
-| L1 | Do we become effectively "Pawchive-first" in the UI (Kemono demoted to archive/thumbnail)? | **Yes** — matches reality as of 2026-10; keep Kemono fully functional, just not the default. |
-| L2 | Auto-switch Kemono → Pawchive on 404/403, or prompt? | Prompt once per creator, remember the choice; silent rewriting hides what the app is doing. |
-| L3 | Add `cum.st` now or when a user asks? | **Now** — it is a one-line registry entry once §7 exists, and Coomer is otherwise dead weight. |
+| L1 | Do we become effectively "Pawchive-first" in the UI (Kemono demoted to archive/thumbnail)? | ❌ **Rejected.** Pawchive is not "first", it is the only site. A demotion ladder implies a second site to demote. |
+| L2 | Auto-switch Kemono → Pawchive on 404/403, or prompt? | ❌ **Rejected (moot).** No cross-site switch exists. 404/403 handling stays inside Pawchive (retry → thumbnail fallback). |
+| L3 | Add `cum.st` now or when a user asks? | ❌ **Rejected.** `cum.st` is OnlyHaven, a separate project; it will not be added even if requested. |
 | L4 | Are the P3 features still out of scope (`WORKLIST` §F)? | Re-confirm. Several (only-links export, text export) are cheap and Yuvi proves the demand. |
 | L5 | Do we accept `Range`/multi-part complexity before or after the v5.14.0 merge? | **After** — merge + P0 first, ship a correct v5.14.0, then plumbing. |
